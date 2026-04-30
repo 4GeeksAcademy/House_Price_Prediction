@@ -76,6 +76,7 @@ NUMERIC_FEATURES: frozenset[str] = frozenset(
         "Fireplaces", "GarageCars", "GarageArea",
         "NeighborhoodScore", "CensusMedianValue", "MedianIncomeK", "OwnerOccupiedRate",
         "SchoolDistrictRating",
+        "WalkScore", "HOAFee", "PricePerSqft", "LandValue",
     }
 )
 
@@ -104,6 +105,10 @@ FEATURE_ALIASES: dict[str, tuple[str, ...]] = {
     "ZipCode": ("zip_code", "zipcode", "postal_code", "zip"),
     "State": ("state", "state_code"),
     "SchoolDistrictRating": ("school_district_rating", "schooldistrictrating", "school_rating"),
+    "WalkScore": ("walk_score", "walkscore", "walkability_score"),
+    "HOAFee": ("hoa_fee", "hoa", "hoa_monthly", "homeowner_association_fee"),
+    "PricePerSqft": ("price_per_sqft", "price_per_sq_ft", "ppsf", "price_per_sqfoot"),
+    "LandValue": ("land_value", "land_assessed_value", "lot_value"),
 }
 
 _HIGH_NULL_RATE = 0.50
@@ -906,6 +911,7 @@ def main() -> None:
         "PropertyType", "NeighborhoodScore", "CensusMedianValue",
         "MedianIncomeK", "OwnerOccupiedRate", "City", "ZipCode",
         "State", "SchoolDistrictRating",
+        "WalkScore", "HOAFee", "PricePerSqft", "LandValue",
     ):
         if new_feat not in expected_features:
             expected_features.append(new_feat)

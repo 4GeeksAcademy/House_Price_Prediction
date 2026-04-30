@@ -1,0 +1,9 @@
+run built_training_pipeline.py
+
+run_api.py--since it does not exist, so running the next file for fast API-->
+
+$env:APP_ENV = "test"; $env:DATABASE_URL = "sqlite:///data/processed/live_validation.db"; uvicorn house_price_prediction.api.main:app --host 0.0.0.0 --port 8000
+
+run and train the model --> it is taking this command-->
+$env:PYTHONPATH = "src" ; ./.venv/Scripts/python.exe scripts/train_from_splits.py
+
