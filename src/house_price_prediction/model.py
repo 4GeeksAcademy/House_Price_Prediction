@@ -1,9 +1,25 @@
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import joblib
 import numpy as np
 from lightgbm import LGBMRegressor
+
+
+@dataclass(frozen=True)
+class ModelMetadata:
+    feature_columns: tuple[str, ...]
+    target_column: str | None
+    model_name: str | None
+    model_version: str | None
+
+
+@dataclass(frozen=True)
+class TrainedModelArtifact:
+    model: Any
+    metadata: ModelMetadata
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.metrics import (
     mean_absolute_error,
@@ -88,3 +104,16 @@ def load_model(model_path: Path):
             f"Model file not found at {model_path}. Train first using scripts/train.py."
         )
     return joblib.load(model_path)
+
+
+def load_model_artifact(model_path: Path) -> TrainedModelArtifact:
+    model = load_model(model_path)
+    return TrainedModelArtifact(
+        model=model,
+        metadata=ModelMetadata(
+            feature_columns=tuple(),
+            target_column=None,
+            model_name="LightGBM",
+            model_version="1.0",
+        ),
+    )

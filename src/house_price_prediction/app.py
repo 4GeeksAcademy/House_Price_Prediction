@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from .address_to_price import PricePredictionPipeline
 import logging
+import urllib.parse
 import pandas as pd
 from pathlib import Path
 
@@ -250,6 +251,105 @@ async def get_live_feature_candidates(
             "offset": offset,
             "error": str(e)
         }
+
+
+class NormalizeAddressRequest(BaseModel):
+    address_line_1: str
+    address_line_2: str | None = None
+    city: str
+    state: str
+    postal_code: str
+    country: str = "US"
+
+
+class PredictionRequest(BaseModel):
+    address_line_1: str
+    address_line_2: str | None = None
+    city: str
+    state: str
+    postal_code: str
+    country: str = "US"
+    requested_by: str | None = None
+
+
+@app.get("/v1/health")
+async def health():
+    """Health check endpoint."""
+    return {"status": "healthy", "service": "house-price-prediction"}
+
+
+@app.post("/v1/properties/normalize")
+async def normalize_address(request: NormalizeAddressRequest):
+    """Geocode and normalize an address."""
+    import uuid
+    full_address = f"{request.address_line_1}, {request.city}, {request.state} {request.postal_code}"
+    if request.address_line_2:
+        full_address = f"{request.address_line_1}, {request.address_line_2}, {request.city}, {request.state} {request.postal_code}"
+    try:
+        # Use Nominatim for geocoding
+        import urllib.request
+        import json as _json
+        encoded = urllib.parse.quote(full_address)
+        url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=1"
+        req = urllib.request.Request(url, headers={"User-Agent": "HousePricePrediction/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            results = _json.loads(resp.read())
+        lat = float(results[0]["lat"]) if results else None
+        lon = float(results[0]["lon"]) if results else None
+        display = results[0].get("display_name", full_address) if results else full_address
+    except Exception:
+        lat, lon, display = None, None, full_address
+
+    return {
+        "normalized_address_id": str(uuid.uuid4()),
+        "address_line_1": request.address_line_1,
+        "address_line_2": request.address_line_2,
+        "city": request.city,
+        "state": request.state,
+        "postal_code": request.postal_code,
+        "country": request.country,
+        "formatted_address": display,
+        "latitude": lat,
+        "longitude": lon,
+    }
+
+
+@app.post("/v1/predictions", status_code=201)
+async def create_prediction(request: PredictionRequest):
+    """Predict house price from a normalized address."""
+    import uuid
+    global pipeline
+    if pipeline is None:
+        pipeline = PricePredictionPipeline()
+
+    full_address = f"{request.address_line_1}, {request.city}, {request.state} {request.postal_code}"
+    try:
+        result = pipeline.predict_price(full_address)
+        predicted_price = result.get("predicted_price", 0)
+        features = result.get("all_16_features", {})
+    except Exception as e:
+        logger.error(f"Prediction error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # Compute completeness score: fraction of features that are non-zero/non-null
+    total_features = len(features) if features else 1
+    populated = sum(1 for v in features.values() if v not in (None, 0, '', 'Unknown'))
+    completeness_score = round(populated / total_features, 4) if total_features else 0.0
+
+    return {
+        "prediction_id": str(uuid.uuid4()),
+        "request_id": str(uuid.uuid4()),
+        "predicted_price": predicted_price,
+        "feature_snapshot": {
+            "completeness_score": completeness_score,
+            "features": {k: round(v, 2) if isinstance(v, float) else v
+                         for k, v in list(features.items())[:4]},
+        },
+        "address_line_1": request.address_line_1,
+        "city": request.city,
+        "state": request.state,
+        "postal_code": request.postal_code,
+    }
 
 
 if __name__ == "__main__":

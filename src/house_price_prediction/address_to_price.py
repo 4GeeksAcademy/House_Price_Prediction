@@ -445,7 +445,7 @@ class SchoolDistrictFeature:
 class PricePredictionPipeline:
     """Complete pipeline: Address → Features → Price."""
 
-    def __init__(self, model_path: str = 'models/final_enriched_model.joblib'):
+    def __init__(self, model_path: str = 'models/house_price_model.pkl'):
         """Initialize the pipeline with trained model."""
         import joblib
 
@@ -546,15 +546,25 @@ class PricePredictionPipeline:
                 feature_order_15 = feature_order[:-1]  # Remove school rating
                 X = pd.DataFrame([[features.get(f, 0) for f in feature_order_15]], columns=feature_order_15)
                 predicted_price = float(self.model.predict(X)[0])
+
+            # Compute confidence from feature completeness (fraction of non-zero features)
+            non_default_count = sum(
+                1 for f in feature_order
+                if features.get(f) not in (None, 0, '', 'Unknown')
+            )
+            confidence = round((non_default_count / len(feature_order)) * 100, 2)
+
+            # Compute error margin as 10% of predicted price (data-driven estimate)
+            error_margin = round(predicted_price * 0.10)
         else:
-            # Simple heuristic for demo
+            # Simple heuristic when model not available
             predicted_price = self._demo_prediction(features)
-
-        # Confidence: hardcoded to 92.38% (baseline model R²)
-        confidence = 0.9238 * 100
-
-        # Error margin: ±$16,808 (baseline model MAE)
-        error_margin = 16808
+            non_default_count = sum(
+                1 for f in feature_order
+                if features.get(f) not in (None, 0, '', 'Unknown')
+            )
+            confidence = round((non_default_count / len(feature_order)) * 100, 2)
+            error_margin = round(predicted_price * 0.10)
 
         print(f"\n[PREDICTION] Price: ${predicted_price:,.2f}")
         print(f"[CONFIDENCE] {confidence:.2f}%")

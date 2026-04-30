@@ -187,12 +187,12 @@ def load_data():
 # Load trained model from pickle/joblib file
 @st.cache_resource
 def load_trained_model():
-    """Load the trained model artifact from the joblib file."""
+    """Load the trained model artifact from the pkl file."""
     import os
     from pathlib import Path
     from src.house_price_prediction.model import load_model_artifact
     
-    model_path = Path(__file__).parent / "models" / "house_price_model.joblib"
+    model_path = Path(__file__).parent / "models" / "house_price_model.pkl"
     
     if not model_path.exists():
         st.warning(f"⚠️ Model file not found at {model_path}")
@@ -648,7 +648,7 @@ if runtime_health is not None:
 # Page selection
 page = st.sidebar.radio(
     "Select a page:",
-    ["Overview", "Data Analysis", "Feature Exploration", "Statistics", "Address Lookup", "Local Predictions", "Live API Tester"]
+    ["Overview", "Data Analysis", "Feature Exploration", "Statistics", "Address Lookup", "Live API Tester"]
 )
 
 # ==================== PAGE: OVERVIEW ====================
@@ -664,7 +664,7 @@ if page == "Overview":
     
     # Model Status
     if model_artifact:
-        st.success("✅ **Trained Model Loaded** from `models/house_price_model.joblib`")
+        st.success("✅ **Trained Model Loaded** from `models/house_price_model.pkl`")
         col_meta1, col_meta2, col_meta3 = st.columns(3)
         with col_meta1:
             st.metric("Model Name", model_artifact.metadata.model_name or "Random Forest")
@@ -986,53 +986,19 @@ elif page == "Address Lookup":
         "results, and run instant price predictions."
     )
 
-    slot_count = st.select_slider(
-        "Search Address boxes",
-        options=[2, 3, 4],
-        value=3,
-        help="Choose how many address lookup panels to show at once.",
-    )
-
     st.caption("Each panel keeps its own search result and prediction so you can compare addresses side by side.")
     st.markdown("---")
 
-    lookup_results: list[dict] = []
-    columns = st.columns(slot_count)
-    for slot_index, column in enumerate(columns):
-        with column:
-            normalized = render_lookup_slot(slot_index, api_base_url)
-            if normalized:
-                lookup_results.append(normalized)
+    slot_count = 2
 
-    mappable_results = [
-        {
-            "lat": result["latitude"],
-            "lon": result["longitude"],
-            "label": result.get("formatted_address") or result.get("address_line_1", "Address"),
-        }
-        for result in lookup_results
-        if result.get("latitude") is not None and result.get("longitude") is not None
-    ]
-
-    if mappable_results:
-        st.markdown("---")
-        st.subheader("🗺️ Comparison Map")
-        st.caption("Plotted addresses from all visible lookup panels.")
-        st.map(pd.DataFrame(mappable_results), latitude="lat", longitude="lon", size=12)
-        "Search for multiple property addresses, view their locations on the map, "
-        "and compare price predictions side by side."
-    )
-    
-    st.markdown("---")
-    
     # Initialize session state for lookup
     if "lookup_predictions" not in st.session_state:
         st.session_state["lookup_predictions"] = []
     if "lookup_normalized" not in st.session_state:
         st.session_state["lookup_normalized"] = None
     
-    # Initialize address slots (up to 3 side-by-side)
-    num_slots = 3
+    # Initialize address slots (up to 2 side-by-side)
+    num_slots = 2
     
     st.subheader("📍 Enter Property Addresses (Side-by-Side)")
     st.write("Fill in one or more addresses and search them individually")
@@ -1124,6 +1090,8 @@ elif page == "Address Lookup":
                         sc, body, url = call_api("POST", api_base_url, "/v1/properties/normalize", payload=lookup_payload)
                     
                     if sc == 200 and isinstance(body, dict):
+                        # Store geocode result for this slot
+                        st.session_state[f"geocode_{slot_idx}"] = body
                         # Store in predictions with auto-prediction
                         pred_payload = dict(lookup_payload)
                         with st.spinner("🧠 Predicting price..."):
@@ -1141,12 +1109,43 @@ elif page == "Address Lookup":
                                 "prediction_id": pred_body.get('prediction_id'),
                             }
                             st.session_state["lookup_predictions"].append(prediction_entry)
-                            st.success(f"✅ Property {slot_idx + 1} added!")
-                            st.balloons()
+                            st.session_state[f"prediction_{slot_idx}"] = pred_body
+                            st.success(f"✅ Property {slot_idx + 1} found!")
                         else:
+                            st.session_state.pop(f"prediction_{slot_idx}", None)
                             st.error(f"❌ Prediction failed")
                     else:
+                        st.session_state.pop(f"geocode_{slot_idx}", None)
                         st.error(f"❌ Address lookup failed")
+
+            # Show geocoded result and prediction for this slot
+            geocode = st.session_state.get(f"geocode_{slot_idx}")
+            prediction = st.session_state.get(f"prediction_{slot_idx}")
+            if geocode:
+                st.markdown("---")
+                st.markdown("**📍 Geocoded Location**")
+                st.caption(geocode.get("formatted_address", ""))
+                lat = geocode.get("latitude")
+                lon = geocode.get("longitude")
+                if lat and lon:
+                    st.caption(f"🌐 Lat: `{lat:.5f}`, Lon: `{lon:.5f}`")
+                    slot_map_df = pd.DataFrame([{"lat": lat, "lon": lon}])
+                    st.map(slot_map_df, latitude="lat", longitude="lon", zoom=13, size=50)
+            if prediction:
+                price = prediction.get("predicted_price")
+                completeness = prediction.get("feature_snapshot", {}).get("completeness_score")
+                features = prediction.get("feature_snapshot", {}).get("features", {})
+                if price is not None:
+                    st.markdown("**🏠 Price Prediction**")
+                    st.metric("Predicted Price", f"${price:,.0f}")
+                if completeness is not None:
+                    st.metric("Data Completeness", f"{completeness:.1%}")
+                if features:
+                    st.markdown("**Key Features:**")
+                    feat_cols = st.columns(2)
+                    for i, (k, v) in enumerate(list(features.items())[:4]):
+                        with feat_cols[i % 2]:
+                            st.metric(k, round(v, 2) if isinstance(v, float) else v)
     
     st.markdown("---")
     
@@ -1281,165 +1280,7 @@ elif page == "Address Lookup":
             st.info("💡 Predict an address price using the button above to start comparing properties!")
 
 
-<<<<<<< HEAD
-=======
-# ==================== PAGE: LOCAL PREDICTIONS ====================
-elif page == "Local Predictions":
-    st.title("🧠 Local Predictions (Offline Model)")
-    st.markdown(
-        "Make predictions using the trained model loaded from `models/house_price_model.joblib` "
-        "without needing the backend API."
-    )
-    
-    if not model_artifact:
-        st.error("❌ No trained model available. Please train a model first using `scripts/train.py`")
-    else:
-        st.success("✅ Trained model loaded successfully!")
-        
-        # Display model info
-        with st.expander("📋 Model Information", expanded=False):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Model Type", model_artifact.metadata.model_name or "Random Forest Regressor")
-            with col2:
-                st.metric("Feature Count", len(model_artifact.metadata.feature_columns))
-            with col3:
-                st.metric("Target", model_artifact.metadata.target_column or "price")
-            
-            st.write("**Features:**")
-            st.write(", ".join(model_artifact.metadata.feature_columns[:10]))
-            if len(model_artifact.metadata.feature_columns) > 10:
-                st.caption(f"... and {len(model_artifact.metadata.feature_columns) - 10} more")
-        
-        st.markdown("---")
-        
-        # Input form for predictions
-        st.subheader("📊 Make a Prediction")
-        
-        with st.form("local_prediction_form"):
-            st.write("Enter property features to predict the price:")
-            
-            # Create input fields based on available features
-            # Using common housing features
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                bedrooms = st.number_input("Bedrooms", min_value=0, max_value=15, value=3)
-                bathrooms = st.number_input("Bathrooms", min_value=0.0, max_value=10.0, value=2.0, step=0.5)
-                grade = st.number_input("Grade (Quality 1-13)", min_value=1, max_value=13, value=7)
-            
-            with col2:
-                sqft_living = st.number_input("Living Area (sqft)", min_value=500, max_value=10000, value=2000, step=100)
-                sqft_lot = st.number_input("Lot Area (sqft)", min_value=1000, max_value=100000, value=10000, step=100)
-                floors = st.number_input("Floors", min_value=1.0, max_value=5.0, value=1.0, step=0.5)
-            
-            with col3:
-                condition = st.number_input("Condition (1-5)", min_value=1, max_value=5, value=3)
-                yr_built = st.number_input("Year Built", min_value=1800, max_value=2026, value=2000)
-                waterfront = st.checkbox("Waterfront Property")
-            
-            submit_button = st.form_submit_button("🔮 Predict Price", use_container_width=True)
-        
-        if submit_button:
-            try:
-                # Prepare input data
-                # This assumes the model expects these features as they are
-                features_dict = {
-                    'bedrooms': bedrooms,
-                    'bathrooms': bathrooms,
-                    'sqft_living': sqft_living,
-                    'sqft_lot': sqft_lot,
-                    'grade': grade,
-                    'condition': condition,
-                    'yr_built': yr_built,
-                    'floors': floors,
-                    'waterfront': 1 if waterfront else 0,
-                }
-                
-                # Convert to DataFrame with proper column order
-                input_df = pd.DataFrame([features_dict])
-                
-                with st.spinner("🧠 Generating prediction..."):
-                    # Make prediction
-                    predicted_price = model_artifact.model.predict(input_df)[0]
-                
-                # Display results
-                st.markdown("---")
-                st.success("✅ Prediction Complete!")
-                
-                col_price, col_range = st.columns([2, 1])
-                with col_price:
-                    st.metric("Predicted Price", f"${predicted_price:,.0f}", delta=None)
-                
-                # Show input summary
-                st.subheader("📝 Input Summary")
-                summary_data = {
-                    'Feature': list(features_dict.keys()),
-                    'Value': list(features_dict.values())
-                }
-                st.dataframe(pd.DataFrame(summary_data), use_container_width=True)
-                
-            except Exception as e:
-                st.error(f"❌ Prediction failed: {str(e)}")
-                st.write("Make sure all required features are provided in the correct format.")
-        
-        st.markdown("---")
-        
-        # Batch predictions from dataset
-        st.subheader("📦 Batch Predictions from Dataset")
-        
-        if st.button("Predict on Dataset Sample (first 100 rows)", use_container_width=True):
-            try:
-                # Get sample from dataset
-                sample_df = df.head(100).copy()
-                
-                # Select only features that the model expects
-                features_for_model = [f for f in model_artifact.metadata.feature_columns if f in sample_df.columns]
-                sample_features = sample_df[features_for_model]
-                
-                with st.spinner("🧠 Generating batch predictions..."):
-                    predictions = model_artifact.model.predict(sample_features)
-                
-                # Add predictions to dataframe
-                results_df = sample_df.copy()
-                results_df['predicted_price'] = predictions
-                results_df['actual_price'] = sample_df.get('price', None)
-                
-                if 'price' in sample_df.columns:
-                    results_df['difference'] = results_df['actual_price'] - results_df['predicted_price']
-                    results_df['percent_error'] = (results_df['difference'] / results_df['actual_price'] * 100).abs()
-                
-                st.success(f"✅ Generated {len(predictions)} predictions!")
-                
-                # Show summary statistics
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Avg Predicted", f"${predictions.mean():,.0f}")
-                with col2:
-                    st.metric("Min Predicted", f"${predictions.min():,.0f}")
-                with col3:
-                    st.metric("Max Predicted", f"${predictions.max():,.0f}")
-                with col4:
-                    if 'price' in sample_df.columns:
-                        errors = results_df['percent_error']
-                        st.metric("Avg Error %", f"{errors.mean():.1f}%")
-                
-                # Show results table
-                st.write("**Predictions:**")
-                display_cols = ['predicted_price', 'actual_price'] if 'price' in sample_df.columns else ['predicted_price']
-                if 'difference' in results_df.columns:
-                    display_cols.append('difference')
-                
-                st.dataframe(
-                    results_df[display_cols + ['bedrooms', 'bathrooms', 'sqft_living', 'grade']].head(20),
-                    use_container_width=True
-                )
-                
-            except Exception as e:
-                st.error(f"❌ Batch prediction failed: {str(e)}")
-
 # ==================== PAGE: LIVE API TESTER ====================
->>>>>>> f643b67 (latest changes)
 elif page == "Live API Tester":
     st.title("🧪 Live API Tester")
     st.markdown(
