@@ -31,12 +31,20 @@ from sklearn.pipeline import Pipeline
 
 from .config import Settings
 from .data import load_dataset, make_train_test_split, split_features_target
+from .feature_schema import DEFAULT_PREDICTION_FEATURES
 from .features import build_preprocessor
 
 
 def train_and_save_model(settings: Settings) -> dict[str, float]:
     df = load_dataset(settings.raw_data_path)
     x, y = split_features_target(df, settings.target_column)
+
+    # Restrict to the canonical feature schema so the trained artifact
+    # always matches DEFAULT_PREDICTION_FEATURES regardless of extra
+    # columns the source JSONL may carry (e.g. "Neighborhood" zip strings).
+    schema_cols = [col for col in DEFAULT_PREDICTION_FEATURES if col in x.columns]
+    x = x[schema_cols]
+
     x_train, x_test, y_train, y_test = make_train_test_split(
         x, y, test_size=settings.test_size, random_state=settings.random_state
     )

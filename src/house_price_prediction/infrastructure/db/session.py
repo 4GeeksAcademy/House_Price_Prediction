@@ -49,6 +49,19 @@ def _validate_required_schema(engine) -> None:
             + ". Run Alembic migrations before starting the API."
         )
 
+    prediction_columns = {column["name"] for column in inspector.get_columns("predictions")}
+    required_prediction_columns = {
+        "was_reused",
+        "source_prediction_id",
+    }
+    missing_prediction_columns = sorted(required_prediction_columns - prediction_columns)
+    if missing_prediction_columns:
+        raise RuntimeError(
+            "Database schema is out of date. Missing predictions columns: "
+            + ", ".join(missing_prediction_columns)
+            + ". Run Alembic migrations before starting the API."
+        )
+
 
 def init_database(
     database_url: str,

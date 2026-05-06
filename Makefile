@@ -7,8 +7,10 @@ setup:
 	. .venv/bin/activate && pip install -r requirements-dev.txt
 	. .venv/bin/activate && pip install -e .
 
-train:
-	python scripts/train.py --min-rows=25
+train: train-from-csv
+
+train-from-csv-only:
+	RAW_DATA_PATH=data/processed/csv_training_data.jsonl python scripts/train.py --min-rows=100
 
 bootstrap-data:
 	python scripts/bootstrap_training_data.py --base-url=$(BOOTSTRAP_BASE_URL) --output=data/processed/live_feature_store.jsonl --metadata-output=data/processed/live_feature_store.jsonl.meta.json --min-completeness-score=0.9 --max-rows=5000 --min-output-rows=1
@@ -69,8 +71,15 @@ clean:
 
 # ── CSV-based training (real structural features from King County + Ames) ──
 
-ingest-csv:
-	python scripts/ingest_csv_training_data.py
+seed-national-scorer:
+	python scripts/seed_national_neighborhood_scorer.py \
+	  --cache=data/processed/zcta_national_centroids.json \
+	  --output=models/neighborhood_scorer.joblib
+
+ingest-csv: seed-national-scorer
+	python scripts/ingest_csv_training_data.py \
+	  --zcta-cache=data/processed/zcta_census_stats.json \
+	  --national-scorer-path=models/neighborhood_scorer.joblib
 
 train-from-csv: ingest-csv
 	RAW_DATA_PATH=data/processed/csv_training_data.jsonl python scripts/train.py --min-rows=100

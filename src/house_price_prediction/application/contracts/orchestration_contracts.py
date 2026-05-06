@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from house_price_prediction.domain.contracts.prediction_contracts import (
     NormalizedAddress,
@@ -43,6 +43,8 @@ class PredictionWorkflowResult(BaseModel):
     source_prediction_id: UUID | None
     selected_feature_policy_name: str | None = None
     selected_feature_policy_version: str | None = None
+    key_features: dict[str, Any] = Field(default_factory=dict)
+    feature_source: str | None = None
 
 
 class NormalizationStageResult(BaseModel):

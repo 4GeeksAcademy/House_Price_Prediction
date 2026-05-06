@@ -13,6 +13,9 @@ from house_price_prediction.infrastructure.providers.property_type_classifier im
     classify_property_type,
 )
 from house_price_prediction.infrastructure.providers.resilient import NonRetryableProviderError
+from house_price_prediction.telemetry import get_logger
+
+logger = get_logger(__name__)
 
 
 class CensusPropertyDataClient:
@@ -62,8 +65,16 @@ class CensusPropertyDataClient:
                 payload=payload,
                 fetched_at=datetime.now(UTC),
             )
-        except Exception:
+        except Exception as census_exc:
             if fallback_response is not None:
+                logger.warning(
+                    "census_property_enrichment_failed reason=%s fallback=%s "
+                    "lat=%s lon=%s — using heuristic data instead",
+                    type(census_exc).__name__,
+                    fallback_response.provider_name,
+                    normalized_address.latitude,
+                    normalized_address.longitude,
+                )
                 payload = dict(fallback_response.payload)
                 payload["feature_provenance"] = self._build_feature_provenance(
                     fallback_response=fallback_response,
@@ -90,6 +101,7 @@ class CensusPropertyDataClient:
                 "format": "json",
             },
             headers={"User-Agent": "house-price-prediction-backend/0.1"},
+            timeout=10.0,
         )
         response.raise_for_status()
         geographies = response.json().get("result", {}).get("geographies", {})
@@ -131,6 +143,7 @@ class CensusPropertyDataClient:
                 "in": f"state:{geography['state']} county:{geography['county']}",
             },
             headers={"User-Agent": "house-price-prediction-backend/0.1"},
+            timeout=10.0,
         )
         response.raise_for_status()
         rows = response.json()
@@ -227,7 +240,6 @@ class CensusPropertyDataClient:
             "Fireplaces": 1 if (median_home_value or 0) >= 300000 else 0,
             "GarageCars": garage_cars,
             "GarageArea": garage_cars * 260,
-            "Neighborhood": geography["name"].split(",", maxsplit=1)[0],
             "HouseStyle": house_style,
             # ── new model features surfaced from census context ──────────
             "CensusMedianValue": median_home_value,

@@ -47,8 +47,6 @@ _FEATURE_POLICY_DEFINITIONS: tuple[FeaturePolicyDefinition, ...] = (
             "CensusMedianValue": 2.0,
             "MedianIncomeK": 1.5,
             "OwnerOccupiedRate": 1.0,
-            # legacy neighbourhood string kept for backward compat
-            "Neighborhood": 1.0,
         },
     ),
     FeaturePolicyDefinition(
@@ -57,13 +55,11 @@ _FEATURE_POLICY_DEFINITIONS: tuple[FeaturePolicyDefinition, ...] = (
         description="Emphasize lot size, land-adjacent characteristics, and neighbourhood tier.",
         emphasis_features=(
             "LotArea",
-            "Neighborhood",
             "NeighborhoodScore",
             "CensusMedianValue",
         ),
         weights={
             "LotArea": 3.0,
-            "Neighborhood": 1.5,
             "NeighborhoodScore": 2.5,
             "CensusMedianValue": 2.0,
             "MedianIncomeK": 1.5,
@@ -96,7 +92,6 @@ _FEATURE_POLICY_DEFINITIONS: tuple[FeaturePolicyDefinition, ...] = (
             "GrLivArea": 2.0,
             "LotArea": 1.5,
             "YearBuilt": 1.5,
-            "Neighborhood": 1.0,
         },
     ),
 )

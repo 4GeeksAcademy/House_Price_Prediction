@@ -34,6 +34,7 @@ class CensusGeocodingClient:
                 "format": "json",
             },
             headers={"User-Agent": "house-price-prediction-backend/0.1"},
+            timeout=10.0,
         )
         response.raise_for_status()
         matches = response.json().get("result", {}).get("addressMatches", [])

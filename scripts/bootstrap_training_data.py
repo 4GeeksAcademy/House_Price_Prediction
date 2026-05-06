@@ -25,8 +25,12 @@ FEATURE_ALIASES: dict[str, tuple[str, ...]] = {
     "Fireplaces": ("fire_places", "fireplace_count"),
     "GarageCars": ("garage_cars", "garagecars"),
     "GarageArea": ("garage_area", "garagearea"),
-    "Neighborhood": ("neighborhood_name",),
     "HouseStyle": ("house_style",),
+    "PropertyType": ("property_type",),
+    "NeighborhoodScore": ("neighborhood_score", "neighbourhood_score"),
+    "CensusMedianValue": ("census_median_value", "census_median_home_value", "median_home_value"),
+    "MedianIncomeK": ("median_income_k", "census_median_income_k"),
+    "OwnerOccupiedRate": ("owner_occupied_rate", "census_owner_occupancy_rate", "owner_rate"),
 }
 
 NUMERIC_FEATURES: frozenset[str] = frozenset(
@@ -44,6 +48,10 @@ NUMERIC_FEATURES: frozenset[str] = frozenset(
         "Fireplaces",
         "GarageCars",
         "GarageArea",
+        "NeighborhoodScore",
+        "CensusMedianValue",
+        "MedianIncomeK",
+        "OwnerOccupiedRate",
     }
 )
 

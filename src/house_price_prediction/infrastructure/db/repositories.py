@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
@@ -23,6 +24,7 @@ from house_price_prediction.domain.contracts.prediction_contracts import (
     ProviderResponseSummary,
     WorkflowEventItem,
 )
+from house_price_prediction.feature_schema import KEY_BUYER_FEATURES
 from house_price_prediction.infrastructure.db.models import (
     FeatureSnapshotModel,
     ModelRegistryModel,
@@ -32,6 +34,11 @@ from house_price_prediction.infrastructure.db.models import (
     ProviderResponseModel,
     WorkflowEventModel,
 )
+
+
+def _extract_key_features(features: dict[str, Any]) -> dict[str, Any]:
+    """Return only the populated buyer-relevant features from a raw feature dict."""
+    return {k: features[k] for k in KEY_BUYER_FEATURES if features.get(k) is not None}
 
 
 class PredictionRepository:
@@ -130,13 +137,15 @@ class PredictionRepository:
             .all()
         )
 
-        # Keep only responses that look like property feature payloads.
+        # Keep only responses that look like full property feature payloads.
+        # All three key features must be present — a partial match could be a
+        # geocoding response leaking into the property-response table.
         required_feature_keys = {"LotArea", "OverallQual", "GrLivArea"}
         for row in rows:
             payload = row.payload
             if not isinstance(payload, dict):
                 continue
-            if len(required_feature_keys.intersection(payload.keys())) < 2:
+            if not required_feature_keys.issubset(payload.keys()):
                 continue
             return ProviderResponseContract(
                 provider_name=row.provider_name,
@@ -299,6 +308,11 @@ class PredictionRepository:
                 trace_feature_snapshot = source_feature_snapshot
 
         provider_responses = self.get_provider_responses(trace_request_id)
+        trace_features = (
+            trace_feature_snapshot.features
+            if isinstance(trace_feature_snapshot.features, dict)
+            else {}
+        )
         return PredictionDetailResponse(
             request_id=UUID(request.id),
             prediction_id=UUID(prediction.id),
@@ -325,6 +339,7 @@ class PredictionRepository:
             selected_feature_policy_name=request.feature_policy_name,
             selected_feature_policy_version=request.feature_policy_version,
             error_message=request.error_message,
+            key_features=_extract_key_features(trace_features),
         )
 
     def list_recent_predictions(self, limit: int = 10, offset: int = 0) -> PredictionListResponse:
@@ -399,6 +414,18 @@ class PredictionRepository:
             )
             provider_by_request.setdefault(row.request_id, []).append(contract)
 
+        # Batch-load feature snapshots so we can surface key_features on every list item.
+        all_feature_snapshot_ids = [prediction.feature_snapshot_id for prediction, _, _ in rows]
+        snapshot_rows = self._session.execute(
+            select(FeatureSnapshotModel).where(
+                FeatureSnapshotModel.id.in_(all_feature_snapshot_ids)
+            )
+        ).scalars().all()
+        snapshot_by_id: dict[str, dict[str, Any]] = {
+            row.id: (row.features if isinstance(row.features, dict) else {})
+            for row in snapshot_rows
+        }
+
         # Build list items — zero extra DB queries from here.
         items: list[PredictionListItem] = []
         for prediction, request, norm_addr in rows:
@@ -406,17 +433,16 @@ class PredictionRepository:
             provider_responses = provider_by_request.get(effective_request_id, [])
             feature_source = self._find_feature_source(provider_responses)
 
+            raw_features = snapshot_by_id.get(prediction.feature_snapshot_id, {})
+            key_features = _extract_key_features(raw_features)
+
             normalized_address = NormalizedAddress(
-                address_line_1=" ".join(request.address_line_1.strip().upper().split()),
-                address_line_2=(
-                    " ".join(request.address_line_2.strip().upper().split())
-                    if request.address_line_2
-                    else None
-                ),
-                city=" ".join(request.city.strip().upper().split()),
-                state=request.state.strip().upper(),
-                postal_code=request.postal_code.strip().upper(),
-                country=request.country.strip().upper(),
+                address_line_1=norm_addr.address_line_1,
+                address_line_2=norm_addr.address_line_2,
+                city=norm_addr.city,
+                state=norm_addr.state,
+                postal_code=norm_addr.postal_code,
+                country=norm_addr.country,
                 formatted_address=request.normalized_address,
                 latitude=norm_addr.latitude,
                 longitude=norm_addr.longitude,
@@ -443,6 +469,7 @@ class PredictionRepository:
                     feature_source=feature_source,
                     selected_feature_policy_name=request.feature_policy_name,
                     selected_feature_policy_version=request.feature_policy_version,
+                    key_features=key_features,
                 )
             )
 
@@ -662,16 +689,12 @@ class PredictionRepository:
                     break
 
             normalized_address = NormalizedAddress(
-                address_line_1=" ".join(request.address_line_1.strip().upper().split()),
-                address_line_2=(
-                    " ".join(request.address_line_2.strip().upper().split())
-                    if request.address_line_2
-                    else None
-                ),
-                city=" ".join(request.city.strip().upper().split()),
-                state=request.state.strip().upper(),
-                postal_code=request.postal_code.strip().upper(),
-                country=request.country.strip().upper(),
+                address_line_1=norm_addr.address_line_1,
+                address_line_2=norm_addr.address_line_2,
+                city=norm_addr.city,
+                state=norm_addr.state,
+                postal_code=norm_addr.postal_code,
+                country=norm_addr.country,
                 formatted_address=request.normalized_address,
                 latitude=norm_addr.latitude,
                 longitude=norm_addr.longitude,
@@ -717,22 +740,31 @@ class PredictionRepository:
         event_name: str | None = None,
         sort: str = "asc",
     ) -> tuple[list[WorkflowEventItem], int]:
-        query = self._session.query(WorkflowEventModel).filter(
-            WorkflowEventModel.request_id == str(request_id)
-        )
+        filters = [WorkflowEventModel.request_id == str(request_id)]
         if event_name:
-            query = query.filter(WorkflowEventModel.event_name == event_name)
+            filters.append(WorkflowEventModel.event_name == event_name)
 
-        total_count = int(query.count())
-        if sort == "desc":
-            query = query.order_by(WorkflowEventModel.occurred_at.desc())
-        else:
-            query = query.order_by(WorkflowEventModel.occurred_at.asc())
-        query = query.offset(offset)
+        total_count = int(
+            self._session.scalar(
+                select(func.count(WorkflowEventModel.id)).where(*filters)
+            ) or 0
+        )
+
+        order_col = (
+            WorkflowEventModel.occurred_at.desc()
+            if sort == "desc"
+            else WorkflowEventModel.occurred_at.asc()
+        )
+        stmt = (
+            select(WorkflowEventModel)
+            .where(*filters)
+            .order_by(order_col)
+            .offset(offset)
+        )
         if limit is not None:
-            query = query.limit(limit)
+            stmt = stmt.limit(limit)
 
-        rows = query.all()
+        rows = self._session.scalars(stmt).all()
         return [
             WorkflowEventItem(
                 event_name=row.event_name,
@@ -847,25 +879,35 @@ class PredictionRepository:
         normalized_address_row = self._session.get(
             NormalizedAddressModel, request.normalized_address_id
         )
-        address_line_1 = " ".join(request.address_line_1.strip().upper().split())
-        city = " ".join(request.city.strip().upper().split())
-        state = request.state.strip().upper()
-        postal_code = request.postal_code.strip().upper()
-        country = request.country.strip().upper()
-        address_line_2 = (
-            " ".join(request.address_line_2.strip().upper().split())
-            if request.address_line_2
-            else None
-        )
+        if normalized_address_row is not None:
+            # Prefer geocoder-normalized field values stored in the normalized_addresses table.
+            return NormalizedAddress(
+                address_line_1=normalized_address_row.address_line_1,
+                address_line_2=normalized_address_row.address_line_2,
+                city=normalized_address_row.city,
+                state=normalized_address_row.state,
+                postal_code=normalized_address_row.postal_code,
+                country=normalized_address_row.country,
+                formatted_address=request.normalized_address,
+                latitude=normalized_address_row.latitude,
+                longitude=normalized_address_row.longitude,
+                geocoding_source=normalized_address_row.geocoding_source,
+            )
+        # Fallback: reconstruct from raw request fields when the normalized address
+        # record is unexpectedly missing (should not occur in normal operation).
         return NormalizedAddress(
-            address_line_1=address_line_1,
-            address_line_2=address_line_2,
-            city=city,
-            state=state,
-            postal_code=postal_code,
-            country=country,
+            address_line_1=" ".join(request.address_line_1.strip().upper().split()),
+            address_line_2=(
+                " ".join(request.address_line_2.strip().upper().split())
+                if request.address_line_2
+                else None
+            ),
+            city=" ".join(request.city.strip().upper().split()),
+            state=request.state.strip().upper(),
+            postal_code=request.postal_code.strip().upper(),
+            country=request.country.strip().upper(),
             formatted_address=request.normalized_address,
-            latitude=getattr(normalized_address_row, "latitude", None),
-            longitude=getattr(normalized_address_row, "longitude", None),
-            geocoding_source=getattr(normalized_address_row, "geocoding_source", None),
+            latitude=None,
+            longitude=None,
+            geocoding_source=None,
         )

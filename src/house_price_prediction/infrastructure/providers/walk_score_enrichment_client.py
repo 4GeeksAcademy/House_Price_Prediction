@@ -38,9 +38,11 @@ class WalkScoreEnrichmentClient:
         self,
         base_provider: PropertyDataProvider,
         api_key: str = "",
+        timeout_seconds: float = 10.0,
     ) -> None:
         self._base = base_provider
         self._api_key = (api_key or "").strip()
+        self._timeout_seconds = timeout_seconds
 
     # ------------------------------------------------------------------ #
     # Public interface                                                     #
@@ -95,7 +97,7 @@ class WalkScoreEnrichmentClient:
                 "wsapikey": self._api_key,
             },
             headers={"User-Agent": "house-price-prediction-backend/0.1"},
-            timeout=5.0,
+            timeout=self._timeout_seconds,
         )
         response.raise_for_status()
         data = response.json()
