@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
+import traceback
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from house_price_prediction.api.routers import (
     dashboard,
@@ -101,6 +104,25 @@ def create_app(
         version=app_settings.model_version,
         lifespan=lifespan,
     )
+
+    _logger = logging.getLogger(__name__)
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        """Catch-all for unhandled exceptions — logs the error with a traceback and
+        returns a structured 500 so internal details never leak to the caller."""
+        _logger.error(
+            "unhandled_exception path=%s method=%s error=%s\n%s",
+            request.url.path,
+            request.method,
+            exc,
+            traceback.format_exc(),
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error. Please retry or contact support."},
+        )
+
     app.include_router(dashboard.router)
     app.include_router(health.router)
     app.include_router(meta.router)
