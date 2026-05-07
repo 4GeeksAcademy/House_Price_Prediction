@@ -460,7 +460,7 @@ def _run_offline_pipeline(slot_index: int, fallback: dict) -> None:
             "PricePerSqft":         ("💲 Price/sqft",        lambda v: f"${v:,.0f}"),
             "NeighborhoodScore":    ("📍 Nbhd Score",        lambda v: f"{v:.0f}/100"),
             "CensusMedianValue":    ("🏦 Median Value",      lambda v: f"${v:,.0f}"),
-            "MedianIncomeK":        ("💰 Median Income",     lambda v: f"${v:.0f}k"),
+            "MedianIncomeK":        ("💰 Med. Income",      lambda v: f"${v:.0f}k"),
             "SchoolDistrictRating": ("🎓 School Rating",     lambda v: f"{v:.1f}/10"),
             "WalkScore":            ("🚶 Walk Score",        lambda v: f"{v:.0f}/100"),
             "PropertyType":         ("🏡 Property Type",     lambda v: str(v)),
@@ -863,7 +863,7 @@ def render_lookup_slot(slot_index: int, api_base_url: str) -> dict | None:
                 "SchoolDistrictRating": ("🎓 School Rating",  lambda v: f"{v:.1f}/10"),
                 "WalkScore":         ("🚶 Walk Score",        lambda v: f"{v:.0f}/100"),
                 "CensusMedianValue": ("🏦 Median Value",      lambda v: f"${v:,.0f}"),
-                "MedianIncomeK":     ("💰 Median Income",     lambda v: f"${v:.0f}k"),
+                "MedianIncomeK":     ("💰 Med. Income",      lambda v: f"${v:.0f}k"),
                 "PropertyType":      ("🏡 Property Type",     lambda v: str(v)),
             }
             display_items = []

@@ -497,7 +497,7 @@ async def create_prediction(request: PredictionRequest):
     _PROPERTY_DISPLAY_KEYS = [
         "BedroomAbvGr", "FullBath", "HalfBath", "GrLivArea", "LotArea",
         "YearBuilt", "GarageCars", "GarageArea", "OverallQual", "OverallCond",
-        "Fireplaces", "TotRmsAbvGrd",
+        "Fireplaces", "TotRmsAbvGrd", "PricePerSqft",
         "NeighborhoodScore", "CensusMedianValue", "MedianIncomeK",
         "SchoolDistrictRating", "WalkScore", "PropertyType", "City", "State",
     ]
