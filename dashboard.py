@@ -803,16 +803,7 @@ def render_lookup_slot(slot_index: int, api_base_url: str) -> dict | None:
                 if normalized.get("geocoding_source"):
                     st.caption(f"📡 Source: {normalized['geocoding_source']}")
 
-        # Map pin
-        latitude = normalized.get("latitude")
-        longitude = normalized.get("longitude")
-        if latitude is not None and longitude is not None:
-            st.map(
-                pd.DataFrame([{"lat": latitude, "lon": longitude}]),
-                latitude="lat",
-                longitude="lon",
-                zoom=13,
-            )
+        # Map pin moved below Property Details
 
         # ── Predict Price ─────────────────────────────────────────────────
         st.markdown("---")
@@ -893,9 +884,17 @@ def render_lookup_slot(slot_index: int, api_base_url: str) -> dict | None:
                 if not isinstance(detail, str):
                     st.json(detail)
 
-
-
-        # ── Market context (shown below the prediction) ────────────────────
+        # ── Location Map ───────────────────────────────────────────────────
+        _map_lat = normalized.get("latitude")
+        _map_lon = normalized.get("longitude")
+        if _map_lat is not None and _map_lon is not None:
+            st.markdown("##### 📍 Property Location")
+            st.map(
+                pd.DataFrame([{"lat": _map_lat, "lon": _map_lon}]),
+                latitude="lat",
+                longitude="lon",
+                zoom=14,
+            )
         with st.expander("📊 Dataset Market Context", expanded=False):
             metrics = calculate_market_metrics(df)
             render_market_metrics(metrics)
