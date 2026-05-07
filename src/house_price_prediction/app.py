@@ -417,21 +417,48 @@ async def normalize_address(request: NormalizeAddressRequest):
 
     parts = [p for p in [line1, line2, city, f"{state} {postal_code}".strip()] if p]
     full_address = ", ".join(parts)
-    # Geocode using full_address — prefer the user's original query for best Nominatim results
     geocode_query = request.full_address if request.full_address else full_address
+
+    lat, lon, display = None, None, geocode_query
     try:
         import urllib.request
         import json as _json
+        # Primary: US Census Geocoder (no key, high coverage for US addresses)
         encoded = urllib.parse.quote(geocode_query)
-        url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=1"
-        req = urllib.request.Request(url, headers={"User-Agent": "HousePricePrediction/1.0"})
+        census_url = (
+            f"https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+            f"?address={encoded}&benchmark=2020&format=json"
+        )
+        req = urllib.request.Request(census_url, headers={"User-Agent": "HousePricePrediction/1.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
-            results = _json.loads(resp.read())
-        lat = float(results[0]["lat"]) if results else None
-        lon = float(results[0]["lon"]) if results else None
-        display = results[0].get("display_name", geocode_query) if results else geocode_query
+            data = _json.loads(resp.read())
+        matches = data.get("result", {}).get("addressMatches", [])
+        if matches:
+            coords = matches[0]["coordinates"]
+            lat = float(coords["y"])
+            lon = float(coords["x"])
+            display = matches[0].get("matchedAddress", geocode_query)
     except Exception:
-        lat, lon, display = None, None, geocode_query
+        pass
+
+    if lat is None:
+        try:
+            import urllib.request
+            import json as _json
+            # Fallback: Nominatim
+            encoded = urllib.parse.quote(geocode_query)
+            url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=1"
+            req = urllib.request.Request(url, headers={"User-Agent": "HousePricePrediction/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                results = _json.loads(resp.read())
+            if results:
+                lat = float(results[0]["lat"])
+                lon = float(results[0]["lon"])
+                display = results[0].get("display_name", geocode_query)
+        except Exception:
+            pass
+
+    geocoding_source = "Census" if lat is not None else None
 
     return {
         "normalized_address_id": str(uuid.uuid4()),
@@ -444,7 +471,7 @@ async def normalize_address(request: NormalizeAddressRequest):
         "formatted_address": display,
         "latitude": lat,
         "longitude": lon,
-        "geocoding_source": "Nominatim" if lat is not None else None,
+        "geocoding_source": geocoding_source,
     }
 
 

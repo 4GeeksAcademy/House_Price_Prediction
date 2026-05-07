@@ -35,7 +35,26 @@ class AssessorAPIConnector:
 
     @staticmethod
     def _geocode_address_simple(address: str):
-        """Return (lat, lon) for address via Nominatim, or (0.0, 0.0) on failure."""
+        """Return (lat, lon) for address via Census Geocoder (primary) or Nominatim (fallback)."""
+        try:
+            import urllib.request
+            import json as _json
+            import urllib.parse
+            encoded = urllib.parse.quote(address)
+            url = (
+                f"https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+                f"?address={encoded}&benchmark=2020&format=json"
+            )
+            req = urllib.request.Request(url, headers={"User-Agent": "HousePricePrediction/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            matches = data.get("result", {}).get("addressMatches", [])
+            if matches:
+                coords = matches[0]["coordinates"]
+                return float(coords["y"]), float(coords["x"])
+        except Exception as e:
+            print(f"[GEOCODE-CENSUS] Failed: {e}")
+        # Fallback: Nominatim
         try:
             import urllib.request
             import json as _json
@@ -48,7 +67,7 @@ class AssessorAPIConnector:
             if results:
                 return float(results[0]["lat"]), float(results[0]["lon"])
         except Exception as e:
-            print(f"[GEOCODE-SIMPLE] Failed: {e}")
+            print(f"[GEOCODE-NOMINATIM] Failed: {e}")
         return 0.0, 0.0
 
     @staticmethod
