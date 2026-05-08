@@ -16,6 +16,7 @@ env/
 
 # Data and artifacts
 models/*.joblib
+models/*.pkl
 data/raw/*
 !data/raw/.gitkeep
 data/processed/*

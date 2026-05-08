@@ -1,9 +1,30 @@
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+
+def _get_bool_env(key: str, default: bool = False) -> bool:
+    """Parse a boolean environment variable."""
+    value = os.getenv(key, str(default)).strip().lower()
+    return value in ("true", "1", "yes", "on")
+
+
+def _parse_feature_policy_state_overrides(env_str: str) -> dict[str, str]:
+    """Parse FEATURE_POLICY_STATE_OVERRIDES from env string."""
+    if not env_str or not env_str.strip():
+        return {}
+    try:
+        pairs = env_str.split(",")
+        result = {}
+        for pair in pairs:
+            state, policy = pair.split("=", 1)
+            result[state.strip()] = policy.strip()
+        return result
+    except (ValueError, AttributeError):
+        return {}
 
 
 @dataclass(frozen=True)
@@ -31,9 +52,11 @@ class Settings:
     training_min_rows: int = 0
     feature_policy_name: str = "balanced-v1"
     feature_policy_version: str = "v1"
-    feature_policy_state_overrides: dict[str, str] = field(default_factory=dict)
+    feature_policy_state_overrides: dict[str, str] = field(
+        default_factory=dict)
     walkscore_api_key: str = ""
-    neighborhood_scorer_path: Path = field(default_factory=lambda: Path("models/neighborhood_scorer.joblib"))
+    neighborhood_scorer_path: Path = field(
+        default_factory=lambda: Path("models/neighborhood_scorer.joblib"))
 
 
 def load_settings() -> Settings:
@@ -59,14 +82,17 @@ def load_settings() -> Settings:
         model_name=os.getenv("MODEL_NAME", "house-price-random-forest"),
         model_version=os.getenv("MODEL_VERSION", "0.1.0"),
         enable_mock_predictor=_get_bool_env("ENABLE_MOCK_PREDICTOR", False),
-        property_data_provider=os.getenv("PROPERTY_DATA_PROVIDER", "free-fallback"),
+        property_data_provider=os.getenv(
+            "PROPERTY_DATA_PROVIDER", "free-fallback"),
         geocoding_provider=os.getenv("GEOCODING_PROVIDER", "free-fallback"),
-        prediction_reuse_max_age_hours=int(os.getenv("PREDICTION_REUSE_MAX_AGE_HOURS", "24")),
+        prediction_reuse_max_age_hours=int(
+            os.getenv("PREDICTION_REUSE_MAX_AGE_HOURS", "24")),
         provider_response_cache_max_age_hours=int(
             os.getenv("PROVIDER_RESPONSE_CACHE_MAX_AGE_HOURS", "24")
         ),
         training_min_rows=int(os.getenv("TRAINING_MIN_ROWS", "0")),
-        provider_timeout_seconds=float(os.getenv("PROVIDER_TIMEOUT_SECONDS", "25.0")),
+        provider_timeout_seconds=float(
+            os.getenv("PROVIDER_TIMEOUT_SECONDS", "25.0")),
         provider_max_retries=int(os.getenv("PROVIDER_MAX_RETRIES", "2")),
         feature_policy_name=os.getenv("FEATURE_POLICY_NAME", "balanced-v1"),
         feature_policy_version=os.getenv("FEATURE_POLICY_VERSION", "v1"),
@@ -75,6 +101,7 @@ def load_settings() -> Settings:
         ),
         walkscore_api_key=os.getenv("WALKSCORE_API_KEY", ""),
         neighborhood_scorer_path=Path(
-            os.getenv("NEIGHBORHOOD_SCORER_PATH", "models/neighborhood_scorer.joblib")
+            os.getenv("NEIGHBORHOOD_SCORER_PATH",
+                      "models/neighborhood_scorer.joblib")
         ),
     )

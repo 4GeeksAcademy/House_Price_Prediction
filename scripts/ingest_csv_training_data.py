@@ -142,7 +142,7 @@ def _fetch_zcta_census_stats(
     stats: dict[str, dict[str, float | None]] = {}
     unique_zips = sorted(set(zipcodes))
     batches = [
-        unique_zips[i : i + _CENSUS_BATCH_SIZE]
+        unique_zips[i: i + _CENSUS_BATCH_SIZE]
         for i in range(0, len(unique_zips), _CENSUS_BATCH_SIZE)
     ]
     print(
@@ -158,12 +158,14 @@ def _fetch_zcta_census_stats(
         )
         try:
             req = urllib.request.Request(
-                url, headers={"User-Agent": "house-price-prediction-ingest/1.0"}
+                url, headers={
+                    "User-Agent": "house-price-prediction-ingest/1.0"}
             )
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data: list[list[str]] = json.loads(resp.read().decode("utf-8"))
         except Exception as exc:
-            print(f"  [census] WARNING: batch {batch_n}/{len(batches)} failed: {exc}")
+            print(
+                f"  [census] WARNING: batch {batch_n}/{len(batches)} failed: {exc}")
             continue
 
         headers = data[0]
@@ -171,7 +173,8 @@ def _fetch_zcta_census_stats(
         for row in data[1:]:
             zipcode = str(row[zcta_col]).zfill(5)
             median_value = _parse_census_int(row[headers.index("B25077_001E")])
-            median_income = _parse_census_int(row[headers.index("B19013_001E")])
+            median_income = _parse_census_int(
+                row[headers.index("B19013_001E")])
             owner_units = _parse_census_int(row[headers.index("B25003_002E")])
             total_units = _parse_census_int(row[headers.index("B25003_001E")])
 
@@ -453,14 +456,16 @@ def _fit_and_assign_neighborhood_scores(
     ]
 
     if not valid_indices:
-        print("  [scorer] No geocoded rows — NeighborhoodScore left as None for all rows.")
+        print(
+            "  [scorer] No geocoded rows — NeighborhoodScore left as None for all rows.")
         return None
 
     # ------------------------------------------------------------------
     # Mode 1: pre-built national scorer
     # ------------------------------------------------------------------
     if national_scorer_path is not None and national_scorer_path.exists():
-        print(f"  [scorer] Loading pre-built national scorer from {national_scorer_path} ...")
+        print(
+            f"  [scorer] Loading pre-built national scorer from {national_scorer_path} ...")
         svc = NeighborhoodScoreService.load(national_scorer_path)
         scored = 0
         for global_i in valid_indices:
@@ -490,7 +495,8 @@ def _fit_and_assign_neighborhood_scores(
         if rows[i].get("SalePrice") is not None and rows[i]["SalePrice"] > 0
     ]
     if not kc_indices:
-        print("  [scorer] No geocoded rows with SalePrice — NeighborhoodScore left as None.")
+        print(
+            "  [scorer] No geocoded rows with SalePrice — NeighborhoodScore left as None.")
         return None
 
     lats = [rows[i]["_lat"] for i in kc_indices]
@@ -543,7 +549,8 @@ def _load_king_county(path: Path, min_price: float, max_bedrooms: int) -> list[d
     rows: list[dict[str, Any]] = []
     dropped = 0
     for _, row in df.iterrows():
-        mapped = _map_kc_row(row, min_price=min_price, max_bedrooms=max_bedrooms)
+        mapped = _map_kc_row(row, min_price=min_price,
+                             max_bedrooms=max_bedrooms)
         if mapped is None:
             dropped += 1
         else:
@@ -569,6 +576,202 @@ def _load_ames(path: Path, min_price: float) -> list[dict[str, Any]]:
 
     print(f"  [ames] {len(rows):,} rows mapped  ({dropped} dropped)")
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Redfin nationwide single-family mapper
+# ---------------------------------------------------------------------------
+
+def _is_single_family(property_type: str) -> bool:
+    """Filter Redfin PROPERTY TYPE to accept only single-family homes."""
+    if property_type is None:
+        return False
+    pt = str(property_type).strip().lower()
+    single_family_keywords = ["single family", "single-family", "house"]
+    return any(keyword in pt for keyword in single_family_keywords)
+
+
+def _map_redfin_row(
+    row: pd.Series,
+    state: str,
+    min_price: float,
+    max_bedrooms: int,
+) -> dict[str, Any] | None:
+    """Map one Redfin CSV row (nationwide HousingPriceUSA) to the training schema dict.
+
+    Redfin schema:
+      PROPERTY TYPE, PRICE, BEDS, BATHS, SQUARE FEET, LOT SIZE, YEAR BUILT,
+      LATITUDE, LONGITUDE, STATE OR PROVINCE, ZIP OR POSTAL CODE, etc.
+    """
+    try:
+        # Filter for single-family homes
+        if not _is_single_family(row.get("PROPERTY TYPE")):
+            return None
+
+        price = float(row["PRICE"])
+        if price < min_price:
+            return None
+
+        bedrooms = int(row.get("BEDS", 0))
+        if bedrooms < 1 or bedrooms > max_bedrooms:
+            return None
+
+        bathrooms = float(row.get("BATHS", 0))
+        if bathrooms < 0.5:
+            return None
+
+        sqft_living = int(row.get("SQUARE FEET", 0))
+        if sqft_living < 200:
+            return None
+
+        sqft_lot = int(row.get("LOT SIZE", 0))
+        if sqft_lot <= 0:
+            return None
+
+        year_built = int(row.get("YEAR BUILT", 1950))
+        if year_built < 1800 or year_built > 2030:
+            return None
+
+        lat = float(row.get("LATITUDE"))
+        lon = float(row.get("LONGITUDE"))
+
+        zipcode = str(row.get("ZIP OR POSTAL CODE", "")).strip()
+        if not zipcode:
+            zipcode = "00000"
+
+    except (KeyError, TypeError, ValueError):
+        return None
+
+    # Map Redfin fields to canonical schema
+    # For Redfin, we have full data; use reasonable defaults for estimated fields
+    full_bath = int(bathrooms)
+    half_bath = 1 if (bathrooms - full_bath) >= 0.25 else 0
+
+    # Estimate OverallQual (1-10) from property characteristics
+    # Rule: larger homes, newer builds, and more bathrooms suggest higher quality
+    overall_qual = min(
+        10, max(1, int(2 + bathrooms + (year_built - 1900) / 20)))
+
+    # Estimate OverallCond (1-9) — assume reasonable maintenance
+    overall_cond = 7
+
+    # Estimate HouseStyle from bedrooms
+    if bedrooms <= 2:
+        house_style = "1Story"
+    elif bedrooms == 3:
+        house_style = "SLvl"
+    else:
+        house_style = "2Story"
+
+    # Estimate TotRmsAbvGrd from bedrooms + sqft_living
+    tot_rms = max(4, min(14, int(bedrooms + 2 + sqft_living / 350)))
+
+    # Estimate garage (typical for single-family)
+    garage_cars = 2 if sqft_living > 1500 else 1
+    garage_area = garage_cars * 240
+
+    # Estimate fireplaces (typical for single-family)
+    fireplaces = 1 if sqft_living > 1500 else 0
+
+    year_remod = year_built  # No renovation data; use year built
+
+    property_type = classify_property_type({
+        "OverallQual": overall_qual,
+        "GrLivArea": sqft_living,
+        "TotRmsAbvGrd": tot_rms,
+        "BedroomAbvGr": bedrooms,
+        "HouseStyle": house_style,
+        "CensusMedianValue": None,
+        "OwnerOccupiedRate": None,
+    })
+
+    return {
+        "LotArea": sqft_lot,
+        "OverallQual": overall_qual,
+        "OverallCond": overall_cond,
+        "YearBuilt": year_built,
+        "YearRemodAdd": year_remod,
+        "GrLivArea": sqft_living,
+        "FullBath": full_bath,
+        "HalfBath": half_bath,
+        "BedroomAbvGr": bedrooms,
+        "TotRmsAbvGrd": tot_rms,
+        "Fireplaces": fireplaces,
+        "GarageCars": garage_cars,
+        "GarageArea": garage_area,
+        "PropertyType": property_type,
+        "HouseStyle": house_style,
+        "NeighborhoodScore": None,  # filled in after KNN fitting
+        "CensusMedianValue": None,  # filled by Census API at inference
+        "MedianIncomeK": None,
+        "OwnerOccupiedRate": None,
+        "Neighborhood": zipcode,
+        "SalePrice": price,
+        "_lat": lat,
+        "_lon": lon,
+        "_source": f"redfin-{state}",
+    }
+
+
+def _load_redfin_nationwide(
+    data_dir: Path,
+    min_price: float,
+    max_bedrooms: int,
+    state_filter: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Load all or a subset of Redfin CSV files from data/raw/HousingPriceUSA/.
+
+    Each file is named like AK-1.csv, AK-2.csv, etc. (state abbreviation + partition).
+    Filters for single-family homes and returns the canonicalized row list.
+
+    Args:
+        data_dir: Path to HousingPriceUSA directory
+        min_price: Minimum price threshold
+        max_bedrooms: Maximum bedroom count
+        state_filter: Optional list of state abbreviations to load (e.g. ["WA", "CA"])
+                     If None, loads all states.
+    """
+    csv_files = sorted(data_dir.glob("*.csv"))
+    if state_filter:
+        csv_files = [f for f in csv_files if f.stem.split(
+            "-")[0].upper() in state_filter]
+
+    print(f"  [redfin] Found {len(csv_files):,} file(s) to load")
+
+    all_rows: list[dict[str, Any]] = []
+    total_raw = 0
+    failed_files = []
+
+    for csv_file in csv_files:
+        state = csv_file.stem.split("-")[0].upper()
+        try:
+            df = pd.read_csv(csv_file, dtype=str)
+            total_raw += len(df)
+            dropped_filter = 0
+            dropped_bad = 0
+
+            for _, row in df.iterrows():
+                mapped = _map_redfin_row(
+                    row, state=state, min_price=min_price, max_bedrooms=max_bedrooms)
+                if mapped is None:
+                    dropped_filter += 1
+                else:
+                    all_rows.append(mapped)
+
+            print(
+                f"    {state}: {len(df):,} raw → {len(df) - dropped_filter:,} mapped "
+                f"({dropped_filter} filtered)"
+            )
+        except Exception as exc:
+            failed_files.append((csv_file.name, str(exc)))
+            print(f"    {state}: ERROR: {exc}")
+
+    if failed_files:
+        print(f"  [redfin] {len(failed_files)} file(s) failed to load")
+
+    print(
+        f"  [redfin] {total_raw:,} raw rows → {len(all_rows):,} single-family rows mapped")
+    return all_rows
 
 
 # ---------------------------------------------------------------------------
@@ -607,6 +810,8 @@ def _write_report(
 def _print_summary(rows: list[dict[str, Any]], scorer: NeighborhoodScoreService | None) -> None:
     kc_rows = [r for r in rows if r.get("_source") == "king-county"]
     ames_rows = [r for r in rows if r.get("_source") == "ames"]
+    redfin_rows = [r for r in rows if r.get(
+        "_source", "").startswith("redfin-")]
     scored_rows = [r for r in rows if r.get("NeighborhoodScore") is not None]
 
     prices = [r["SalePrice"] for r in rows]
@@ -622,15 +827,19 @@ def _print_summary(rows: list[dict[str, Any]], scorer: NeighborhoodScoreService 
     print(f"  Total rows          : {len(rows):,}")
     print(f"  King County rows    : {len(kc_rows):,}")
     print(f"  Ames rows           : {len(ames_rows):,}")
+    print(f"  Redfin rows         : {len(redfin_rows):,}")
     print(f"  Rows with NeighScore: {len(scored_rows):,}")
     if prices:
-        print(f"  Price range         : ${min(prices):,.0f} – ${max(prices):,.0f}")
+        print(
+            f"  Price range         : ${min(prices):,.0f} – ${max(prices):,.0f}")
         print(f"  Median price        : ${float(np.median(prices)):,.0f}")
     print(f"  PropertyType dist   : {prop_types}")
     if scorer:
         diag = scorer.diagnostics()
-        print(f"  Scorer ref points   : {diag.get('reference_point_count', 0):,}")
-        print(f"  Scorer k / decay    : {diag.get('k')} / {diag.get('decay_km')} km")
+        print(
+            f"  Scorer ref points   : {diag.get('reference_point_count', 0):,}")
+        print(
+            f"  Scorer k / decay    : {diag.get('k')} / {diag.get('decay_km')} km")
     print("  Census features     : None (CensusMedianValue, MedianIncomeK,")
     print("                        OwnerOccupiedRate — filled by live API")
     print("=" * 58)
@@ -646,9 +855,17 @@ def main() -> None:
     )
     parser.add_argument(
         "--source",
-        choices=["king-county", "ames", "both"],
+        choices=["king-county", "ames", "both",
+                 "redfin-nationwide", "redfin-all"],
         default="both",
-        help="Which CSV source(s) to ingest (default: both).",
+        help=(
+            "Data source(s) to ingest. Options:\n"
+            "  king-county: Original King County WA data\n"
+            "  ames: Ames, Iowa data\n"
+            "  both: King County + Ames (default)\n"
+            "  redfin-nationwide: All nationwide Redfin single-family homes\n"
+            "  redfin-all: Nationwide + King County + Ames"
+        ),
     )
     parser.add_argument(
         "--kc-csv",
@@ -659,6 +876,21 @@ def main() -> None:
         "--ames-csv",
         default="data/raw/housing.csv",
         help="Path to Ames Iowa dataset (default: data/raw/housing.csv).",
+    )
+    parser.add_argument(
+        "--redfin-dir",
+        default="data/raw/HousingPriceUSA",
+        help="Path to Redfin nationwide CSV directory (default: data/raw/HousingPriceUSA).",
+    )
+    parser.add_argument(
+        "--redfin-states",
+        nargs="+",
+        default=None,
+        help=(
+            "Optional: List of state abbreviations to load from Redfin directory. "
+            "E.g., --redfin-states WA CA OR to load only Washington, California, Oregon. "
+            "If not specified, loads all states in the directory."
+        ),
     )
     parser.add_argument(
         "--output-dir",
@@ -709,7 +941,7 @@ def main() -> None:
         "--max-bedrooms",
         type=int,
         default=10,
-        help="Drop KC rows with more bedrooms than this (default: 10).",
+        help="Drop rows with more bedrooms than this (default: 10).",
     )
     parser.add_argument(
         "--min-output-rows",
@@ -748,21 +980,38 @@ def main() -> None:
 
     all_rows: list[dict[str, Any]] = []
 
-    if args.source in ("king-county", "both"):
+    if args.source in ("king-county", "both", "redfin-all"):
         kc_path = Path(args.kc_csv)
         if not kc_path.exists():
-            print(f"ERROR: King County CSV not found at {kc_path}", file=sys.stderr)
+            print(
+                f"ERROR: King County CSV not found at {kc_path}", file=sys.stderr)
             sys.exit(1)
         all_rows.extend(
-            _load_king_county(kc_path, min_price=args.min_price, max_bedrooms=args.max_bedrooms)
+            _load_king_county(kc_path, min_price=args.min_price,
+                              max_bedrooms=args.max_bedrooms)
         )
 
-    if args.source in ("ames", "both"):
+    if args.source in ("ames", "both", "redfin-all"):
         ames_path = Path(args.ames_csv)
         if not ames_path.exists():
             print(f"ERROR: Ames CSV not found at {ames_path}", file=sys.stderr)
             sys.exit(1)
         all_rows.extend(_load_ames(ames_path, min_price=args.min_price))
+
+    if args.source in ("redfin-nationwide", "redfin-all"):
+        redfin_dir = Path(args.redfin_dir)
+        if not redfin_dir.exists():
+            print(
+                f"ERROR: Redfin directory not found at {redfin_dir}", file=sys.stderr)
+            sys.exit(1)
+        all_rows.extend(
+            _load_redfin_nationwide(
+                redfin_dir,
+                min_price=args.min_price,
+                max_bedrooms=args.max_bedrooms,
+                state_filter=args.redfin_states,
+            )
+        )
 
     if len(all_rows) < args.min_output_rows:
         print(
@@ -787,10 +1036,13 @@ def main() -> None:
             if r.get("_source") == "king-county"
         ]
         if kc_zipcodes:
-            zcta_cache_path = Path(args.zcta_cache) if args.zcta_cache else None
-            zcta_stats = _fetch_zcta_census_stats(kc_zipcodes, cache_path=zcta_cache_path)
+            zcta_cache_path = Path(
+                args.zcta_cache) if args.zcta_cache else None
+            zcta_stats = _fetch_zcta_census_stats(
+                kc_zipcodes, cache_path=zcta_cache_path)
             if zcta_stats:
-                census_enriched_count = _apply_census_enrichment(all_rows, zcta_stats)
+                census_enriched_count = _apply_census_enrichment(
+                    all_rows, zcta_stats)
                 print(
                     f"  [census] {census_enriched_count:,} / {len(kc_zipcodes):,} KC rows "
                     "enriched with ACS5 ZCTA census statistics."
@@ -825,7 +1077,10 @@ def main() -> None:
     # Write report
     kc_count = sum(1 for r in all_rows if r.get("_source") == "king-county")
     ames_count = sum(1 for r in all_rows if r.get("_source") == "ames")
-    scored_count = sum(1 for r in all_rows if r.get("NeighborhoodScore") is not None)
+    redfin_count = sum(1 for r in all_rows if r.get(
+        "_source", "").startswith("redfin-"))
+    scored_count = sum(1 for r in all_rows if r.get(
+        "NeighborhoodScore") is not None)
     prices = [r["SalePrice"] for r in all_rows]
     prop_types = {}
     for r in all_rows:
@@ -839,6 +1094,7 @@ def main() -> None:
         "total_rows": len(all_rows),
         "king_county_rows": kc_count,
         "ames_rows": ames_count,
+        "redfin_nationwide_rows": redfin_count,
         "rows_with_neighborhood_score": scored_count,
         "price_min": float(min(prices)) if prices else None,
         "price_max": float(max(prices)) if prices else None,
@@ -877,7 +1133,8 @@ def main() -> None:
     _write_report(report, report_path)
 
     print(f"\nDone. {len(all_rows):,} rows ready for training.")
-    print(f"  Train:  RAW_DATA_PATH={output_path} python scripts/train.py --min-rows=100")
+    print(
+        f"  Train:  RAW_DATA_PATH={output_path} python scripts/train.py --min-rows=100")
 
 
 if __name__ == "__main__":

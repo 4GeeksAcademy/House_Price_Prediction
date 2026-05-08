@@ -164,6 +164,7 @@ class AssessorAPIConnector:
               f"census_median=${census_median:,}, price_per_sqft=${price_per_sqft}")
 
         return {
+            # ── SmartRouter core features (17 columns) ──────────────────
             'LotArea':           lot_area,
             'OverallQual':       overall_qual,
             'OverallCond':       overall_cond,
@@ -178,10 +179,13 @@ class AssessorAPIConnector:
             'GarageCars':        2,
             'GarageArea':        round(gr_liv_area * 0.22),
             'NeighborhoodScore': neighborhood_score,
+            'PropertyType':      'single_family',
+            'HouseStyle':        '1Story',
+            'Neighborhood':      real_zipcode,   # ZIP code — SmartRouter zip_col
+            # ── Extra context (not passed to model, used in response) ──
             'CensusMedianValue': census_median,
             'MedianIncomeK':     median_income_k,
             'OwnerOccupiedRate': 0.65,
-            'PropertyType':      'Single Family',
             'City':              real_city,
             'ZipCode':           real_zipcode,
             'State':             real_state,
@@ -192,7 +196,7 @@ class AssessorAPIConnector:
             'LandValue':         land_value,
             'price':             census_median,
             'address':           address,
-            'source':            'address-derived + Census ACS (pkl model)',
+            'source':            'address-derived + Census ACS (SmartRouter)',
         }
 
 
@@ -466,15 +470,21 @@ class SchoolDistrictFeature:
 class PricePredictionPipeline:
     """Complete pipeline: Address → Features → Price."""
 
-    def __init__(self, model_path: str = 'models/house_price_model.pkl'):
+    def __init__(self, model_path: str = 'models/nationwide_smart_router.pkl'):
         """Initialize the pipeline with trained model."""
+        import sys
         import joblib
+
+        # SmartRouter class lives in scripts/model_utils.py — make it importable
+        _scripts_dir = str(Path(__file__).parent.parent.parent / 'scripts')
+        if _scripts_dir not in sys.path:
+            sys.path.insert(0, _scripts_dir)
 
         try:
             loaded = joblib.load(model_path)
             # Handle both raw model and dict-wrapped model formats
             self.model = loaded.get('model', loaded) if isinstance(loaded, dict) else loaded
-            print(f"[OK] Model loaded: {model_path}")
+            print(f"[OK] Model loaded: {model_path}  (type={type(self.model).__name__})")
         except FileNotFoundError:
             print(f"[WARNING] Model not found at {model_path}")
             print("[INFO] Using baseline demo model")
@@ -571,58 +581,47 @@ class PricePredictionPipeline:
         """Return the ZHVI-to-ACS normalization multiplier for the given state."""
         return cls._MARKET_CALIBRATION.get(state.upper(), cls._MARKET_CALIBRATION_DEFAULT)
 
-    def _make_prediction(self, features: Dict) -> Dict:
-        """Make price prediction using model, then apply market calibration."""
-        # Feature order matches house_price_model.pkl (LightGBM, extended feature set)
-        feature_order = [
-            'LotArea', 'OverallQual', 'OverallCond', 'YearBuilt', 'YearRemodAdd',
-            'GrLivArea', 'FullBath', 'HalfBath', 'BedroomAbvGr', 'TotRmsAbvGrd',
-            'Fireplaces', 'GarageCars', 'GarageArea',
-            'NeighborhoodScore', 'CensusMedianValue', 'MedianIncomeK', 'OwnerOccupiedRate',
-            'PropertyType', 'City', 'ZipCode', 'State',
-            'SchoolDistrictRating', 'WalkScore', 'HOAFee', 'PricePerSqft', 'LandValue',
-        ]
+    # SmartRouter input columns — must match the 17 columns the model was trained on
+    _SR_NUMERIC = [
+        'LotArea', 'OverallQual', 'OverallCond', 'YearBuilt', 'YearRemodAdd',
+        'GrLivArea', 'FullBath', 'HalfBath', 'BedroomAbvGr', 'TotRmsAbvGrd',
+        'Fireplaces', 'GarageCars', 'GarageArea', 'NeighborhoodScore',
+    ]
+    _SR_STR = ['PropertyType', 'HouseStyle', 'Neighborhood']
 
-        # Extract features in correct order
-        X = pd.DataFrame([[features.get(f, 0) for f in feature_order]], columns=feature_order)
+    def _make_prediction(self, features: Dict) -> Dict:
+        """Make price prediction using the SmartRouter (or demo fallback)."""
+        # Build the 17-column DataFrame that SmartRouter.predict() expects
+        row = {}
+        for col in self._SR_NUMERIC:
+            v = features.get(col)
+            row[col] = float(v) if v is not None else 0.0
+        for col in self._SR_STR:
+            v = features.get(col)
+            row[col] = str(v) if v is not None else ''
+        X = pd.DataFrame([row])
 
         if self.model:
-            # Use trained model
             try:
                 raw_price = float(self.model.predict(X)[0])
             except Exception as e:
-                print(f"[WARN] Model predict failed: {e}")
+                print(f"[WARN] SmartRouter predict failed: {e}")
                 raw_price = self._demo_prediction(features)
-
-            # Compute confidence from feature completeness (fraction of non-zero features)
-            non_default_count = sum(
-                1 for f in feature_order
-                if features.get(f) not in (None, 0, '', 'Unknown')
-            )
-            confidence = round((non_default_count / len(feature_order)) * 100, 2)
         else:
-            # Simple heuristic when model not available
             raw_price = self._demo_prediction(features)
-            non_default_count = sum(
-                1 for f in feature_order
-                if features.get(f) not in (None, 0, '', 'Unknown')
-            )
-            confidence = round((non_default_count / len(feature_order)) * 100, 2)
 
-        # ------------------------------------------------------------------
-        # Market normalization: ACS median home values (B25077) are survey
-        # self-estimates and consistently run below actual transaction prices.
-        # Apply a state-specific ZHVI-to-ACS calibration factor to align the
-        # model output with real market transaction price levels.
-        # ------------------------------------------------------------------
-        state = str(features.get('State', 'XX')).upper()
-        cal_factor = self._market_calibration_factor(state)
-        predicted_price = round(raw_price * cal_factor, 2)
-        print(f"[CALIBRATION] state={state}  raw=${raw_price:,.0f}  "
-              f"factor={cal_factor:.2f}  calibrated=${predicted_price:,.0f}")
+        # SmartRouter is trained on actual Redfin transaction prices — no
+        # ACS calibration needed.  Use a flat ±9% error margin reflecting
+        # the model's measured mean error on held-out data.
+        predicted_price = round(raw_price, 2)
+        error_margin    = round(predicted_price * 0.09)
 
-        # Compute error margin as 12% of calibrated price (wider to reflect normalization uncertainty)
-        error_margin = round(predicted_price * 0.12)
+        # Confidence: based on how many SmartRouter features are non-default
+        non_default = sum(
+            1 for col in self._SR_NUMERIC + self._SR_STR
+            if features.get(col) not in (None, 0, 0.0, '', 'Unknown')
+        )
+        confidence = round(non_default / len(self._SR_NUMERIC + self._SR_STR) * 100, 2)
 
         print(f"\n[PREDICTION] Price: ${predicted_price:,.2f}")
         print(f"[CONFIDENCE] {confidence:.2f}%")
