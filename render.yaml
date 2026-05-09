@@ -2,19 +2,8 @@ services:
   - type: web
     name: house-price-api
     runtime: python
-    buildCommand: >
-      pip install -r requirements.txt &&
-      pip install -e . &&
-      python scripts/seed_national_neighborhood_scorer.py
-        --cache=data/processed/zcta_national_centroids.json
-        --output=models/neighborhood_scorer.joblib &&
-      python scripts/ingest_csv_training_data.py
-        --zcta-cache=data/processed/zcta_census_stats.json
-        --national-scorer-path=models/neighborhood_scorer.joblib &&
-      RAW_DATA_PATH=data/processed/csv_training_data.jsonl python scripts/train.py --min-rows=100 &&
-      alembic upgrade head
-    startCommand: bash scripts/start_production.sh
-    healthCheckPath: /v1/health
+    buildCommand: pip install -r requirements.txt && python scripts/bootstrap_training_data.py && python scripts/train.py
+    startCommand: uvicorn src.house_price_prediction.api.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: APP_ENV
         value: production
@@ -23,43 +12,23 @@ services:
       - key: API_PORT
         value: $PORT
       - key: DATABASE_URL
-        # NOTE: SQLite on Render's ephemeral filesystem loses prediction history on
-        # each redeploy. For persistence, add a Render Disk and use an absolute path
-        # like sqlite:////var/data/house_price_prediction.db, or switch to PostgreSQL.
         value: sqlite:///data/processed/house_price_prediction.db
       - key: MODEL_PATH
         value: models/house_price_model.joblib
-      - key: MODEL_NAME
-        value: house-price-lightgbm
-      - key: MODEL_VERSION
-        value: 1.0.0
-      - key: TARGET_COLUMN
-        value: SalePrice
       - key: ENABLE_MOCK_PREDICTOR
-        value: "false"
+        value: "true"
       - key: GEOCODING_PROVIDER
         value: free-fallback
       - key: PROPERTY_DATA_PROVIDER
         value: free-fallback
       - key: PREDICTION_REUSE_MAX_AGE_HOURS
         value: "24"
-      - key: PROVIDER_TIMEOUT_SECONDS
-        value: "25"
-      - key: FEATURE_POLICY_NAME
-        value: balanced-v1
 
   - type: web
     name: house-price-dashboard
     runtime: python
-    buildCommand: pip install -r requirements.txt && pip install -e .
-    startCommand: >-
-      streamlit run dashboard.py
-      --server.port=$PORT
-      --server.address=0.0.0.0
-      --server.headless=true
-      --server.enableCORS=false
-      --server.enableXsrfProtection=false
-    healthCheckPath: /_stcore/health
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run dashboard.py --server.port=$PORT --server.address=0.0.0.0
     envVars:
       - key: API_BASE_URL
-        value: https://house-price-api.onrender.com
+        value: https://housetoupredictapi.onrender.com

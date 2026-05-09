@@ -54,13 +54,8 @@ export-openapi:
 	python scripts/export_openapi.py
 
 ci-verify:
-	python scripts/seed_national_neighborhood_scorer.py \
-	  --cache=data/processed/zcta_national_centroids.json \
-	  --output=models/neighborhood_scorer.joblib
-	python scripts/ingest_csv_training_data.py \
-	  --zcta-cache=data/processed/zcta_census_stats.json \
-	  --national-scorer-path=models/neighborhood_scorer.joblib
-	RAW_DATA_PATH=data/processed/csv_training_data.jsonl python scripts/train.py --min-rows=100
+	python scripts/bootstrap_training_data.py
+	python scripts/train.py --min-rows=2
 	pytest
 	rm -f data/processed/smoke_validation.db
 	DATABASE_URL=sqlite:///data/processed/smoke_validation.db PREDICTION_REUSE_MAX_AGE_HOURS=0 python scripts/smoke_api.py

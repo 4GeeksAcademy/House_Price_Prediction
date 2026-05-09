@@ -1,7 +1,6 @@
 
 import os
-from dataclasses import dataclass, field
-from functools import lru_cache
+from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -33,6 +32,7 @@ class Settings:
     raw_data_path: Path
     target_column: str
     model_path: Path
+    model_type: str
     test_size: float
     random_state: int
     app_name: str
@@ -48,7 +48,6 @@ class Settings:
     prediction_reuse_max_age_hours: int
     provider_timeout_seconds: float
     provider_max_retries: int
-    model_type: str = "lightgbm"
     provider_response_cache_max_age_hours: int = 24
     training_min_rows: int = 0
     feature_policy_name: str = "balanced-v1"
@@ -60,30 +59,6 @@ class Settings:
         default_factory=lambda: Path("models/neighborhood_scorer.joblib"))
 
 
-def _get_bool_env(key: str, default: bool) -> bool:
-    val = os.getenv(key)
-    if val is None:
-        return default
-    return val.strip().lower() in ("1", "true", "yes")
-
-
-def _parse_feature_policy_state_overrides(raw: str) -> dict[str, str]:
-    """Parse a comma-separated STATE=policy_name string into a dict."""
-    result: dict[str, str] = {}
-    if not raw:
-        return result
-    for pair in raw.split(","):
-        pair = pair.strip()
-        if "=" in pair:
-            state, policy = pair.split("=", 1)
-            state = state.strip().upper()
-            policy = policy.strip()
-            if state and policy:
-                result[state] = policy
-    return result
-
-
-@lru_cache(maxsize=1)
 def load_settings() -> Settings:
     """Load settings from environment variables with sensible defaults."""
     load_dotenv()
@@ -104,8 +79,8 @@ def load_settings() -> Settings:
         database_url=os.getenv(
             "DATABASE_URL", "sqlite:///data/processed/house_price_prediction.db"
         ),
-        model_name=os.getenv("MODEL_NAME", "house-price-lightgbm"),
-        model_version=os.getenv("MODEL_VERSION", "1.0.0"),
+        model_name=os.getenv("MODEL_NAME", "house-price-random-forest"),
+        model_version=os.getenv("MODEL_VERSION", "0.1.0"),
         enable_mock_predictor=_get_bool_env("ENABLE_MOCK_PREDICTOR", False),
         property_data_provider=os.getenv(
             "PROPERTY_DATA_PROVIDER", "free-fallback"),

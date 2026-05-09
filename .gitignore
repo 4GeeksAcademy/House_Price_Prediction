@@ -22,8 +22,6 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
-!data/processed/zcta_census_stats.json
-!data/processed/zcta_national_centroids.json
 
 # Environment files
 .env

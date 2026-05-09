@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import warnings
 from typing import Any
 
 import pandas as pd
@@ -52,13 +51,7 @@ class PredictionRuntime:
 
         model = self._load_artifact().model
         try:
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message="X does not have valid feature names",
-                    category=UserWarning,
-                )
-                prediction = model.predict(pd.DataFrame([features]))
+            prediction = model.predict(pd.DataFrame([features]))
         except Exception as exc:
             raise ModelInferenceError(f"Prediction failed: {exc}") from exc
         return float(prediction[0])

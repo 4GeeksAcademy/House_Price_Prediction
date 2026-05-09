@@ -12,44 +12,6 @@ from house_price_prediction.domain.contracts.prediction_contracts import (
 )
 from house_price_prediction.infrastructure.providers.resilient import NonRetryableProviderError
 
-# Nominatim returns full state names (e.g. "Alabama") but all downstream
-# logic — feature policy state overrides, Census FIPS lookups, and DB storage —
-# expects standard 2-letter USPS abbreviations ("AL").
-_US_STATE_ABBREV: dict[str, str] = {
-    "ALABAMA": "AL", "ALASKA": "AK", "ARIZONA": "AZ", "ARKANSAS": "AR",
-    "CALIFORNIA": "CA", "COLORADO": "CO", "CONNECTICUT": "CT", "DELAWARE": "DE",
-    "FLORIDA": "FL", "GEORGIA": "GA", "HAWAII": "HI", "IDAHO": "ID",
-    "ILLINOIS": "IL", "INDIANA": "IN", "IOWA": "IA", "KANSAS": "KS",
-    "KENTUCKY": "KY", "LOUISIANA": "LA", "MAINE": "ME", "MARYLAND": "MD",
-    "MASSACHUSETTS": "MA", "MICHIGAN": "MI", "MINNESOTA": "MN", "MISSISSIPPI": "MS",
-    "MISSOURI": "MO", "MONTANA": "MT", "NEBRASKA": "NE", "NEVADA": "NV",
-    "NEW HAMPSHIRE": "NH", "NEW JERSEY": "NJ", "NEW MEXICO": "NM", "NEW YORK": "NY",
-    "NORTH CAROLINA": "NC", "NORTH DAKOTA": "ND", "OHIO": "OH", "OKLAHOMA": "OK",
-    "OREGON": "OR", "PENNSYLVANIA": "PA", "RHODE ISLAND": "RI", "SOUTH CAROLINA": "SC",
-    "SOUTH DAKOTA": "SD", "TENNESSEE": "TN", "TEXAS": "TX", "UTAH": "UT",
-    "VERMONT": "VT", "VIRGINIA": "VA", "WASHINGTON": "WA", "WEST VIRGINIA": "WV",
-    "WISCONSIN": "WI", "WYOMING": "WY",
-    "DISTRICT OF COLUMBIA": "DC", "WASHINGTON DC": "DC",
-    "PUERTO RICO": "PR", "GUAM": "GU", "VIRGIN ISLANDS": "VI",
-    "AMERICAN SAMOA": "AS", "NORTHERN MARIANA ISLANDS": "MP",
-}
-
-
-def _normalize_state(raw_state: str) -> str:
-    """Convert a US state name or abbreviation to a 2-letter USPS abbreviation.
-
-    Nominatim returns full state names ("Alabama"); Census geocoder returns
-    FIPS numeric codes; callers may pass 2-letter abbreviations directly.
-    This function normalises all three forms to the standard 2-letter code.
-    If the value is already a 2-letter abbreviation it is returned as-is
-    (uppercased).  Unknown values are returned uppercased without conversion
-    so they remain visible in logs and traces.
-    """
-    cleaned = raw_state.strip().upper()
-    if len(cleaned) == 2:
-        return cleaned  # already an abbreviation
-    return _US_STATE_ABBREV.get(cleaned, cleaned)
-
 
 class NominatimGeocodingClient:
     def __init__(self, base_url: str = "https://nominatim.openstreetmap.org") -> None:
@@ -109,7 +71,7 @@ class NominatimGeocodingClient:
             .upper()
             .split()
         )
-        state = _normalize_state(str(address.get("state") or address_payload.state))
+        state = str(address.get("state") or address_payload.state).strip().upper()
         postal_code = str(address.get("postcode") or address_payload.postal_code).strip().upper()
         country = str(address.get("country_code") or address_payload.country).strip().upper()
         address_line_2 = (
