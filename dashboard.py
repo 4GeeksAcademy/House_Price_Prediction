@@ -215,6 +215,39 @@ def load_trained_model():
 df = load_data()
 model_artifact = load_trained_model()
 
+# Human-readable labels for the model feature names most relevant to home buyers.
+_KEY_FEATURE_LABELS: dict[str, str] = {
+    "BedroomAbvGr": "Bedrooms",
+    "TotRmsAbvGrd": "Total Rooms",
+    "GrLivArea": "Living Area (sqft)",
+    "LotArea": "Lot Area (sqft)",
+    "FullBath": "Full Baths",
+    "HalfBath": "Half Baths",
+    "YearBuilt": "Year Built",
+    "GarageArea": "Garage Area (sqft)",
+    "GarageCars": "Garage Cars",
+    "OverallQual": "Overall Quality",
+}
+
+
+def render_key_features(kf: dict, title: str = "Key Property Features") -> None:
+    """Render a key_features dict as Streamlit metric cards.
+
+    Accepts both the raw model names (e.g. 'GrLivArea') and already-None-filtered
+    dicts.  Only entries with non-None values are displayed.
+    """
+    entries = [
+        (_KEY_FEATURE_LABELS.get(k, k), v)
+        for k, v in kf.items()
+        if v is not None
+    ]
+    if not entries:
+        return
+    st.markdown(f"**{title}**")
+    cols = st.columns(min(len(entries), 5))
+    for i, (label, val) in enumerate(entries):
+        cols[i % 5].metric(label, val)
+
 
 def call_api(method: str, base_url: str, path: str, payload: dict | None = None, params: dict | None = None):
     """Execute a backend API request and normalize response handling for UI rendering."""
@@ -1203,7 +1236,30 @@ elif page == "Live API Tester":
     with qa_col2:
         if st.button("List Recent Predictions", use_container_width=True):
             sc, body, url = call_api("GET", api_base_url, "/v1/predictions", params={"limit": 10})
-            render_response("Predictions List Response", sc, body, url)
+            if sc == 200 and isinstance(body, dict) and body.get("items"):
+                items = body["items"]
+                rows = []
+                for item in items:
+                    addr = item.get("normalized_address", {})
+                    kf = item.get("key_features", {})
+                    rows.append({
+                        "Address": addr.get("formatted_address", "—"),
+                        "Price (USD)": f"${item['predicted_price']:,.0f}",
+                        "Bedrooms": kf.get("BedroomAbvGr", "—"),
+                        "Living Area (sqft)": kf.get("GrLivArea", "—"),
+                        "Lot Area (sqft)": kf.get("LotArea", "—"),
+                        "Full Baths": kf.get("FullBath", "—"),
+                        "Year Built": kf.get("YearBuilt", "—"),
+                        "Garage Cars": kf.get("GarageCars", "—"),
+                        "Quality": kf.get("OverallQual", "—"),
+                        "Reused": "✓" if item.get("was_reused") else "",
+                    })
+                st.subheader("Recent Predictions")
+                st.dataframe(pd.DataFrame(rows), use_container_width=True)
+                with st.expander("Raw JSON", expanded=False):
+                    st.json(body)
+            else:
+                render_response("Predictions List Response", sc, body, url)
 
     st.markdown("---")
 
@@ -1290,6 +1346,9 @@ elif page == "Live API Tester":
                         payload=prediction_payload,
                     )
                     render_response("Live Validation • Create Prediction", pred_sc, pred_body, pred_url)
+                    if pred_sc == 201 and isinstance(pred_body, dict):
+                        kf = pred_body.get("key_features", {})
+                        render_key_features(kf)
 
                     prediction_id = pred_body.get("prediction_id") if isinstance(pred_body, dict) else None
                     if prediction_id:
@@ -1302,6 +1361,13 @@ elif page == "Live API Tester":
                         render_response("Live Validation • Prediction Detail", detail_sc, detail_body, detail_url)
 
                         if detail_sc == 200 and isinstance(detail_body, dict):
+                            # Render key features from the full feature snapshot if key_features
+                            # is not already present on the response (backward-compat guard).
+                            kf = detail_body.get("key_features") or {}
+                            if not kf:
+                                raw = detail_body.get("feature_snapshot", {}).get("features", {})
+                                kf = {k: raw[k] for k in _KEY_FEATURE_LABELS if raw.get(k) is not None}
+                            render_key_features(kf)
                             provider_responses = detail_body.get("provider_responses", [])
                             if provider_responses:
                                 latest_provider = provider_responses[-1]
@@ -1411,35 +1477,30 @@ elif page == "Live API Tester":
                     status_icon = {"pass": "✅ PASS", "fail": "❌ FAIL", "error": "⚠️ ERROR"}.get(
                         r.get("pipeline_status", ""), r.get("pipeline_status", "")
                     )
+                    kfv: dict = {k: v for k, v in (r.get("key_feature_values") or {}).items() if v is not None}
                     rows.append({
                         "Scenario": r.get("label", r.get("scenario_id")),
-                        "Category": r.get("category", ""),
                         "Status": status_icon,
-                        "Completeness": (
-                            f"{r['completeness_score']:.1%}"
-                            if r.get("completeness_score") is not None
-                            else "—"
-                        ),
                         "Price (USD)": (
                             f"${r['predicted_price']:,.0f}"
                             if r.get("predicted_price") is not None
                             else "—"
                         ),
-                        "Issues": "; ".join(r.get("issues", [])) or "none",
+                        "Completeness": (
+                            f"{r['completeness_score']:.1%}"
+                            if r.get("completeness_score") is not None
+                            else "—"
+                        ),
+                        "Beds": kfv.get("BedroomAbvGr", "—"),
+                        "Rooms": kfv.get("TotRmsAbvGrd", "—"),
+                        "Living sqft": kfv.get("GrLivArea", "—"),
+                        "Lot sqft": kfv.get("LotArea", "—"),
+                        "Full Baths": kfv.get("FullBath", "—"),
+                        "Year Built": kfv.get("YearBuilt", "—"),
+                        "Issues": "; ".join(r.get("issues", [])) or "—",
                         "Error": r.get("error_message") or "",
                     })
                 st.dataframe(pd.DataFrame(rows), use_container_width=True)
-
-                # Per-scenario key feature surfacing
-                feature_results = [r for r in results if r.get("key_feature_values")]
-                if feature_results:
-                    with st.expander("Key Feature Values per Scenario", expanded=False):
-                        for r in feature_results:
-                            kfv: dict = r.get("key_feature_values", {})
-                            st.markdown(f"**{r.get('label', r['scenario_id'])}**")
-                            kv_cols = st.columns(min(len(kfv), 6) or 1)
-                            for idx, (feat, val) in enumerate(kfv.items()):
-                                kv_cols[idx % 6].metric(feat, val)
 
                 with st.expander("Raw Batch Response", expanded=False):
                     st.json(body)
@@ -1527,6 +1588,8 @@ elif page == "Live API Tester":
                 if isinstance(body, dict) and body.get("prediction_id"):
                     st.session_state["last_prediction_id"] = body["prediction_id"]
                 render_response("Create Prediction Response", sc, body, url)
+                if sc == 201 and isinstance(body, dict):
+                    render_key_features(body.get("key_features", {}))
 
         if st.button("Generate Address Baseline", use_container_width=True, key="adhoc_baseline"):
             bl_payload = dict(adhoc_payload)
@@ -1535,17 +1598,11 @@ elif page == "Live API Tester":
             sc, body, url = call_api("POST", api_base_url, "/v1/validation/address-baseline", payload=bl_payload)
             render_response("Address Baseline Response", sc, body, url)
             if sc == 200 and isinstance(body, dict):
-                kfv = body.get("features", {}).get("key_feature_values", {})
-                if isinstance(kfv, dict) and kfv:
-                    st.subheader("Key Property Features")
-                    fc1, fc2, fc3 = st.columns(3)
-                    fc1.metric("Bedrooms", kfv.get("BedroomAbvGr", "n/a"))
-                    fc2.metric("Total Rooms", kfv.get("TotRmsAbvGrd", "n/a"))
-                    fc3.metric("Living SqFt", kfv.get("GrLivArea", "n/a"))
-                    fc4, fc5, fc6 = st.columns(3)
-                    fc4.metric("Lot Area", kfv.get("LotArea", "n/a"))
-                    fc5.metric("Full Baths", kfv.get("FullBath", "n/a"))
-                    fc6.metric("Half Baths", kfv.get("HalfBath", "n/a"))
+                # key_feature_values may have None values when a feature is missing;
+                # filter them out so render_key_features shows only populated entries.
+                raw_kfv = body.get("features", {}).get("key_feature_values", {})
+                kfv = {k: v for k, v in (raw_kfv or {}).items() if v is not None}
+                render_key_features(kfv)
                 assessment = body.get("assessment", {})
                 checks = assessment.get("checks", []) if isinstance(assessment, dict) else []
                 if checks:
@@ -1649,6 +1706,12 @@ elif page == "Live API Tester":
         if st.button("Get Detail", use_container_width=True, disabled=not prediction_id_input.strip()):
             sc, body, url = call_api("GET", api_base_url, f"/v1/predictions/{prediction_id_input.strip()}")
             render_response("Prediction Detail", sc, body, url)
+            if sc == 200 and isinstance(body, dict):
+                kf = body.get("key_features") or {}
+                if not kf:
+                    raw = body.get("feature_snapshot", {}).get("features", {})
+                    kf = {k: raw[k] for k in _KEY_FEATURE_LABELS if raw.get(k) is not None}
+                render_key_features(kf)
     with drill_col2:
         if st.button("Get Trace", use_container_width=True, disabled=not prediction_id_input.strip()):
             sc, body, url = call_api("GET", api_base_url, f"/v1/predictions/{prediction_id_input.strip()}/trace")

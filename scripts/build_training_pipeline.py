@@ -72,8 +72,9 @@ TARGET_COLUMN = "SalePrice"
 NUMERIC_FEATURES: frozenset[str] = frozenset(
     {
         "LotArea", "OverallQual", "OverallCond", "YearBuilt", "YearRemodAdd",
-        "GrLivArea", "FullBath", "HalfBath", "BedroomAbvGr", "TotRmsAbvGrd",
+        "GrLivArea", "BasementSF", "FullBath", "HalfBath", "BedroomAbvGr", "TotRmsAbvGrd",
         "Fireplaces", "GarageCars", "GarageArea",
+        "Waterfront", "ViewScore",
         "NeighborhoodScore", "CensusMedianValue", "MedianIncomeK", "OwnerOccupiedRate",
         "SchoolDistrictRating",
         "WalkScore", "HOAFee", "PricePerSqft", "LandValue",

@@ -17,6 +17,8 @@ class NominatimGeocodingClient:
     def __init__(self, base_url: str = "https://nominatim.openstreetmap.org") -> None:
         self._base_url = base_url.rstrip("/")
 
+    _HTTPX_TIMEOUT: float = 10.0
+
     def _search(self, query: str) -> list[dict]:
         response = httpx.get(
             f"{self._base_url}/search",
@@ -27,6 +29,7 @@ class NominatimGeocodingClient:
                 "limit": 1,
             },
             headers={"User-Agent": "house-price-prediction-backend/0.1"},
+            timeout=self._HTTPX_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()  # type: ignore[no-any-return]

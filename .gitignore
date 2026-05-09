@@ -16,6 +16,8 @@ env/
 
 # Data and artifacts
 models/*.joblib
+models/*.pkl
+!models/nationwide_smart_router.pkl
 data/raw/*
 !data/raw/.gitkeep
 data/processed/*

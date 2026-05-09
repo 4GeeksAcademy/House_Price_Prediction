@@ -1,0 +1,3409 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "House Price Prediction API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/dashboard/bootstrap": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Get Dashboard Bootstrap",
+        "operationId": "get_dashboard_bootstrap_v1_dashboard_bootstrap_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 5,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardBootstrapResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Get Health",
+        "operationId": "get_health_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/meta/capabilities": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Get Api Capabilities",
+        "operationId": "get_api_capabilities_v1_meta_capabilities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiCapabilitiesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/meta/live-feature-candidates": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Get Live Feature Candidates",
+        "operationId": "get_live_feature_candidates_v1_meta_live_feature_candidates_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "min_completeness_score",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "default": 0.0,
+              "title": "Min Completeness Score"
+            }
+          },
+          {
+            "name": "include_reused",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Reused"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveFeatureCandidatesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/policies/feature": {
+      "get": {
+        "tags": [
+          "policies"
+        ],
+        "summary": "Get Feature Policy Catalog",
+        "operationId": "get_feature_policy_catalog_v1_policies_feature_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeaturePolicyCatalogResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/policies/feature/simulate": {
+      "post": {
+        "tags": [
+          "policies"
+        ],
+        "summary": "Simulate Feature Policies",
+        "operationId": "simulate_feature_policies_v1_policies_feature_simulate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeaturePolicySimulationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeaturePolicySimulationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/predictions": {
+      "post": {
+        "tags": [
+          "predictions"
+        ],
+        "summary": "Create Prediction",
+        "operationId": "create_prediction_v1_predictions_post",
+        "parameters": [
+          {
+            "name": "x-correlation-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Correlation-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictionRequestPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "predictions"
+        ],
+        "summary": "List Predictions",
+        "operationId": "list_predictions_v1_predictions_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/predictions/{prediction_id}": {
+      "get": {
+        "tags": [
+          "predictions"
+        ],
+        "summary": "Get Prediction",
+        "operationId": "get_prediction_v1_predictions__prediction_id__get",
+        "parameters": [
+          {
+            "name": "prediction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Prediction Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/predictions/{prediction_id}/trace": {
+      "get": {
+        "tags": [
+          "predictions"
+        ],
+        "summary": "Get Prediction Trace",
+        "operationId": "get_prediction_trace_v1_predictions__prediction_id__trace_get",
+        "parameters": [
+          {
+            "name": "prediction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Prediction Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionTraceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/predictions/{prediction_id}/events": {
+      "get": {
+        "tags": [
+          "predictions"
+        ],
+        "summary": "Get Prediction Workflow Events",
+        "operationId": "get_prediction_workflow_events_v1_predictions__prediction_id__events_get",
+        "parameters": [
+          {
+            "name": "prediction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Prediction Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "event_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Name"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string",
+              "default": "asc",
+              "title": "Sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionWorkflowEventsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/properties/normalize": {
+      "post": {
+        "tags": [
+          "properties"
+        ],
+        "summary": "Normalize Address",
+        "operationId": "normalize_address_v1_properties_normalize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddressPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormalizedAddress"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/validation/scenarios": {
+      "get": {
+        "tags": [
+          "validation"
+        ],
+        "summary": "List Validation Scenarios",
+        "operationId": "list_validation_scenarios_v1_validation_scenarios_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaselineScenarioCatalogResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/validation/address-baseline": {
+      "post": {
+        "tags": [
+          "validation"
+        ],
+        "summary": "Generate Address Baseline",
+        "operationId": "generate_address_baseline_v1_validation_address_baseline_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddressBaselineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddressBaselineResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/validation/full-audit": {
+      "post": {
+        "tags": [
+          "validation"
+        ],
+        "summary": "Run Full Audit",
+        "operationId": "run_full_audit_v1_validation_full_audit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FullAuditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FullAuditResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/validation/run-scenario-batch": {
+      "post": {
+        "tags": [
+          "validation"
+        ],
+        "summary": "Run Scenario Batch",
+        "description": "Run one or more registered scenarios through the full audit pipeline.\n\nPass ``scenario_ids`` to select a subset; omit (or send ``null``) to run\nall registered scenarios.",
+        "operationId": "run_scenario_batch_v1_validation_run_scenario_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScenarioBatchPipelineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioBatchPipelineResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AddressBaselineRequest": {
+        "properties": {
+          "address_line_1": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Address Line 1"
+          },
+          "address_line_2": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Line 2"
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "City"
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 30,
+            "minLength": 2,
+            "title": "State"
+          },
+          "postal_code": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 3,
+            "title": "Postal Code"
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 60,
+            "minLength": 2,
+            "title": "Country",
+            "default": "US"
+          },
+          "expectations": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BaselineExpectationsInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preferred_policy_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Policy Name",
+            "description": "Optional feature policy to apply for this baseline. When set, overrides the server default and any state-level routing. Must match a known policy name from GET /v1/policies/feature."
+          },
+          "feature_overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Overrides",
+            "description": "Optional map of known feature values to inject before feature assembly. Keys must match expected model feature names (e.g. BedroomAbvGr, GrLivArea). Overrides provider-fetched values for matching keys."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "address_line_1",
+          "city",
+          "state",
+          "postal_code"
+        ],
+        "title": "AddressBaselineRequest"
+      },
+      "AddressBaselineResponse": {
+        "properties": {
+          "contract_version": {
+            "type": "string",
+            "title": "Contract Version"
+          },
+          "evaluated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Evaluated At"
+          },
+          "input_address": {
+            "$ref": "#/components/schemas/AddressPayload"
+          },
+          "location": {
+            "$ref": "#/components/schemas/BaselineLocationObservation"
+          },
+          "features": {
+            "$ref": "#/components/schemas/BaselineFeatureObservation"
+          },
+          "value": {
+            "$ref": "#/components/schemas/BaselineValueObservation"
+          },
+          "assessment": {
+            "$ref": "#/components/schemas/BaselineAssessment"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "contract_version",
+          "evaluated_at",
+          "input_address",
+          "location",
+          "features",
+          "value",
+          "assessment"
+        ],
+        "title": "AddressBaselineResponse"
+      },
+      "AddressPayload": {
+        "properties": {
+          "address_line_1": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Address Line 1"
+          },
+          "address_line_2": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Line 2"
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "City"
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 30,
+            "minLength": 2,
+            "title": "State"
+          },
+          "postal_code": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 3,
+            "title": "Postal Code"
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 60,
+            "minLength": 2,
+            "title": "Country",
+            "default": "US"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "address_line_1",
+          "city",
+          "state",
+          "postal_code"
+        ],
+        "title": "AddressPayload"
+      },
+      "ApiCapabilitiesResponse": {
+        "properties": {
+          "contract_version": {
+            "type": "string",
+            "title": "Contract Version"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/RuntimeSummary"
+          },
+          "provider_policy": {
+            "$ref": "#/components/schemas/ProviderPolicySummary"
+          },
+          "model_expected_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Model Expected Features"
+          },
+          "live_mode_ready": {
+            "type": "boolean",
+            "title": "Live Mode Ready"
+          },
+          "live_mode_issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Live Mode Issues"
+          },
+          "endpoints": {
+            "items": {
+              "$ref": "#/components/schemas/ApiEndpointDescriptor"
+            },
+            "type": "array",
+            "title": "Endpoints"
+          },
+          "examples": {
+            "$ref": "#/components/schemas/ApiExamplePayloads"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "contract_version",
+          "generated_at",
+          "runtime",
+          "provider_policy",
+          "model_expected_features",
+          "live_mode_ready",
+          "endpoints",
+          "examples"
+        ],
+        "title": "ApiCapabilitiesResponse"
+      },
+      "ApiEndpointDescriptor": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "purpose": {
+            "type": "string",
+            "title": "Purpose"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "method",
+          "path",
+          "purpose"
+        ],
+        "title": "ApiEndpointDescriptor"
+      },
+      "ApiExamplePayloads": {
+        "properties": {
+          "prediction_request": {
+            "$ref": "#/components/schemas/AddressPayload"
+          },
+          "normalization_request": {
+            "$ref": "#/components/schemas/AddressPayload"
+          },
+          "baseline_request": {
+            "$ref": "#/components/schemas/AddressPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prediction_request",
+          "normalization_request",
+          "baseline_request"
+        ],
+        "title": "ApiExamplePayloads"
+      },
+      "BaselineAssessment": {
+        "properties": {
+          "overall_status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "not_evaluated"
+            ],
+            "title": "Overall Status"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/BaselineCheckResult"
+            },
+            "type": "array",
+            "title": "Checks"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "overall_status",
+          "checks"
+        ],
+        "title": "BaselineAssessment"
+      },
+      "BaselineCheckResult": {
+        "properties": {
+          "check_name": {
+            "type": "string",
+            "title": "Check Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "skipped"
+            ],
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "check_name",
+          "status",
+          "message"
+        ],
+        "title": "BaselineCheckResult"
+      },
+      "BaselineExpectationsInput": {
+        "properties": {
+          "min_completeness_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Completeness Score"
+          },
+          "required_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Features"
+          },
+          "feature_bounds": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FeatureBoundExpectation"
+            },
+            "type": "object",
+            "title": "Feature Bounds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BaselineExpectationsInput"
+      },
+      "BaselineFeatureObservation": {
+        "properties": {
+          "expected_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Expected Features"
+          },
+          "pulled_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Pulled Features"
+          },
+          "missing_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Features"
+          },
+          "pulled_feature_count": {
+            "type": "integer",
+            "title": "Pulled Feature Count"
+          },
+          "missing_feature_count": {
+            "type": "integer",
+            "title": "Missing Feature Count"
+          },
+          "completeness_score": {
+            "type": "number",
+            "title": "Completeness Score"
+          },
+          "weight_total": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Total"
+          },
+          "selected_feature_policy_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Feature Policy Name"
+          },
+          "selected_feature_policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Feature Policy Version"
+          },
+          "feature_values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Feature Values"
+          },
+          "key_feature_values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Key Feature Values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_features",
+          "pulled_features",
+          "missing_features",
+          "pulled_feature_count",
+          "missing_feature_count",
+          "completeness_score"
+        ],
+        "title": "BaselineFeatureObservation"
+      },
+      "BaselineLocationObservation": {
+        "properties": {
+          "normalized_address": {
+            "$ref": "#/components/schemas/NormalizedAddress"
+          },
+          "geocoding_provider": {
+            "type": "string",
+            "title": "Geocoding Provider"
+          },
+          "geocoding_payload_preview": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Geocoding Payload Preview"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "normalized_address",
+          "geocoding_provider",
+          "geocoding_payload_preview"
+        ],
+        "title": "BaselineLocationObservation"
+      },
+      "BaselineScenario": {
+        "properties": {
+          "scenario_id": {
+            "type": "string",
+            "title": "Scenario Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AddressPayload"
+          },
+          "min_completeness_score": {
+            "type": "number",
+            "title": "Min Completeness Score",
+            "default": 0.95
+          },
+          "required_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Features"
+          },
+          "feature_bounds": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FeatureBoundExpectation"
+            },
+            "type": "object",
+            "title": "Feature Bounds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "scenario_id",
+          "label",
+          "description",
+          "payload"
+        ],
+        "title": "BaselineScenario"
+      },
+      "BaselineScenarioCatalogResponse": {
+        "properties": {
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/BaselineScenario"
+            },
+            "type": "array",
+            "title": "Scenarios"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "scenarios"
+        ],
+        "title": "BaselineScenarioCatalogResponse"
+      },
+      "BaselineValueObservation": {
+        "properties": {
+          "predicted_price": {
+            "type": "number",
+            "title": "Predicted Price"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "property_provider": {
+            "type": "string",
+            "title": "Property Provider"
+          },
+          "property_feature_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Feature Source"
+          },
+          "property_feature_provenance": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Feature Provenance"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "predicted_price",
+          "model_name",
+          "model_version",
+          "property_provider"
+        ],
+        "title": "BaselineValueObservation"
+      },
+      "DashboardBootstrapResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "contract_version": {
+            "type": "string",
+            "title": "Contract Version"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/RuntimeSummary"
+          },
+          "provider_policy": {
+            "$ref": "#/components/schemas/ProviderPolicySummary"
+          },
+          "recent_predictions": {
+            "items": {
+              "$ref": "#/components/schemas/PredictionListItem"
+            },
+            "type": "array",
+            "title": "Recent Predictions"
+          },
+          "event_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DashboardEventSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "links": {
+            "$ref": "#/components/schemas/UiLinkTemplates"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "contract_version",
+          "runtime",
+          "provider_policy",
+          "recent_predictions",
+          "links"
+        ],
+        "title": "DashboardBootstrapResponse"
+      },
+      "DashboardEventSummary": {
+        "properties": {
+          "prediction_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Prediction Id"
+          },
+          "total_events": {
+            "type": "integer",
+            "title": "Total Events"
+          },
+          "latest_event_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Event Name"
+          },
+          "latest_event_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Event At"
+          },
+          "recent_event_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recent Event Names"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prediction_id",
+          "total_events",
+          "recent_event_names"
+        ],
+        "title": "DashboardEventSummary"
+      },
+      "FeatureBoundExpectation": {
+        "properties": {
+          "minimum": {
+            "type": "number",
+            "title": "Minimum"
+          },
+          "maximum": {
+            "type": "number",
+            "title": "Maximum"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "minimum",
+          "maximum"
+        ],
+        "title": "FeatureBoundExpectation"
+      },
+      "FeaturePolicyCatalogResponse": {
+        "properties": {
+          "default_policy_name": {
+            "type": "string",
+            "title": "Default Policy Name"
+          },
+          "default_policy_version": {
+            "type": "string",
+            "title": "Default Policy Version"
+          },
+          "state_overrides": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "State Overrides"
+          },
+          "policies": {
+            "items": {
+              "$ref": "#/components/schemas/FeaturePolicyDescriptor"
+            },
+            "type": "array",
+            "title": "Policies"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "default_policy_name",
+          "default_policy_version",
+          "state_overrides",
+          "policies"
+        ],
+        "title": "FeaturePolicyCatalogResponse"
+      },
+      "FeaturePolicyDescriptor": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "emphasis_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Emphasis Features"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "description",
+          "emphasis_features"
+        ],
+        "title": "FeaturePolicyDescriptor"
+      },
+      "FeaturePolicySimulationItem": {
+        "properties": {
+          "policy_name": {
+            "type": "string",
+            "title": "Policy Name"
+          },
+          "policy_version": {
+            "type": "string",
+            "title": "Policy Version"
+          },
+          "predicted_price": {
+            "type": "number",
+            "title": "Predicted Price"
+          },
+          "completeness_score": {
+            "type": "number",
+            "title": "Completeness Score"
+          },
+          "weight_total": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "policy_name",
+          "policy_version",
+          "predicted_price",
+          "completeness_score"
+        ],
+        "title": "FeaturePolicySimulationItem"
+      },
+      "FeaturePolicySimulationRequest": {
+        "properties": {
+          "address_line_1": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Address Line 1"
+          },
+          "address_line_2": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Line 2"
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "City"
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 30,
+            "minLength": 2,
+            "title": "State"
+          },
+          "postal_code": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 3,
+            "title": "Postal Code"
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 60,
+            "minLength": 2,
+            "title": "Country",
+            "default": "US"
+          },
+          "policy_names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Names"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "address_line_1",
+          "city",
+          "state",
+          "postal_code"
+        ],
+        "title": "FeaturePolicySimulationRequest"
+      },
+      "FeaturePolicySimulationResponse": {
+        "properties": {
+          "normalized_address": {
+            "$ref": "#/components/schemas/NormalizedAddress"
+          },
+          "provider_name": {
+            "type": "string",
+            "title": "Provider Name"
+          },
+          "simulations": {
+            "items": {
+              "$ref": "#/components/schemas/FeaturePolicySimulationItem"
+            },
+            "type": "array",
+            "title": "Simulations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "normalized_address",
+          "provider_name",
+          "simulations"
+        ],
+        "title": "FeaturePolicySimulationResponse"
+      },
+      "FeatureSnapshotSummary": {
+        "properties": {
+          "feature_snapshot_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Feature Snapshot Id"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "completeness_score": {
+            "type": "number",
+            "title": "Completeness Score"
+          },
+          "feature_count": {
+            "type": "integer",
+            "title": "Feature Count"
+          },
+          "populated_feature_count": {
+            "type": "integer",
+            "title": "Populated Feature Count"
+          },
+          "features": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Features"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "feature_snapshot_id",
+          "model_name",
+          "model_version",
+          "completeness_score",
+          "feature_count",
+          "populated_feature_count",
+          "features"
+        ],
+        "title": "FeatureSnapshotSummary"
+      },
+      "FullAuditRequest": {
+        "properties": {
+          "address_line_1": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Address Line 1"
+          },
+          "address_line_2": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Line 2"
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "City"
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 30,
+            "minLength": 2,
+            "title": "State"
+          },
+          "postal_code": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 3,
+            "title": "Postal Code"
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 60,
+            "minLength": 2,
+            "title": "Country",
+            "default": "US"
+          },
+          "requested_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By"
+          },
+          "preferred_policy_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Policy Name",
+            "description": "Optional feature policy to apply for this specific request. When set, overrides the server-configured default and any state-level policy routing. Must match a known policy name from GET /v1/policies/feature."
+          },
+          "feature_overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Overrides",
+            "description": "Optional map of known feature values to inject before feature assembly. Keys must match expected model feature names (e.g. BedroomAbvGr, GrLivArea). Overrides provider-fetched values for matching keys. Prediction reuse is disabled whenever this field is non-null."
+          },
+          "expectations": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BaselineExpectationsInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "address_line_1",
+          "city",
+          "state",
+          "postal_code"
+        ],
+        "title": "FullAuditRequest"
+      },
+      "FullAuditResponse": {
+        "properties": {
+          "contract_version": {
+            "type": "string",
+            "title": "Contract Version"
+          },
+          "audited_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Audited At"
+          },
+          "baseline": {
+            "$ref": "#/components/schemas/AddressBaselineResponse"
+          },
+          "prediction": {
+            "$ref": "#/components/schemas/PredictionResponse"
+          },
+          "prediction_detail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PredictionDetailResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prediction_trace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PredictionTraceResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prediction_events": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PredictionWorkflowEventsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Issues"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "contract_version",
+          "audited_at",
+          "baseline",
+          "prediction",
+          "issues"
+        ],
+        "title": "FullAuditResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "app_name": {
+            "type": "string",
+            "title": "App Name"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "model_available": {
+            "type": "boolean",
+            "title": "Model Available"
+          },
+          "mock_predictor_enabled": {
+            "type": "boolean",
+            "title": "Mock Predictor Enabled"
+          },
+          "property_data_provider": {
+            "type": "string",
+            "title": "Property Data Provider"
+          },
+          "geocoding_provider": {
+            "type": "string",
+            "title": "Geocoding Provider"
+          },
+          "provider_timeout_seconds": {
+            "type": "number",
+            "title": "Provider Timeout Seconds"
+          },
+          "provider_max_retries": {
+            "type": "integer",
+            "title": "Provider Max Retries"
+          },
+          "prediction_reuse_max_age_hours": {
+            "type": "integer",
+            "title": "Prediction Reuse Max Age Hours"
+          },
+          "provider_response_cache_max_age_hours": {
+            "type": "integer",
+            "title": "Provider Response Cache Max Age Hours"
+          },
+          "feature_policy_name": {
+            "type": "string",
+            "title": "Feature Policy Name"
+          },
+          "feature_policy_version": {
+            "type": "string",
+            "title": "Feature Policy Version"
+          },
+          "feature_policy_state_override_count": {
+            "type": "integer",
+            "title": "Feature Policy State Override Count"
+          },
+          "walkscore_enrichment_active": {
+            "type": "boolean",
+            "title": "Walkscore Enrichment Active",
+            "default": false
+          },
+          "live_mode_ready": {
+            "type": "boolean",
+            "title": "Live Mode Ready"
+          },
+          "live_mode_issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Live Mode Issues"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "environment",
+          "app_name",
+          "model_name",
+          "model_version",
+          "model_available",
+          "mock_predictor_enabled",
+          "property_data_provider",
+          "geocoding_provider",
+          "provider_timeout_seconds",
+          "provider_max_retries",
+          "prediction_reuse_max_age_hours",
+          "provider_response_cache_max_age_hours",
+          "feature_policy_name",
+          "feature_policy_version",
+          "feature_policy_state_override_count",
+          "live_mode_ready"
+        ],
+        "title": "HealthResponse"
+      },
+      "LiveFeatureCandidateItem": {
+        "properties": {
+          "prediction_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Prediction Id"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submitted At"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "predicted_price": {
+            "type": "number",
+            "title": "Predicted Price"
+          },
+          "completeness_score": {
+            "type": "number",
+            "title": "Completeness Score"
+          },
+          "was_reused": {
+            "type": "boolean",
+            "title": "Was Reused"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "selected_feature_policy_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Feature Policy Name"
+          },
+          "selected_feature_policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Feature Policy Version"
+          },
+          "feature_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Source"
+          },
+          "provider_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Name"
+          },
+          "normalized_address": {
+            "$ref": "#/components/schemas/NormalizedAddress"
+          },
+          "features": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Features"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prediction_id",
+          "request_id",
+          "submitted_at",
+          "generated_at",
+          "predicted_price",
+          "completeness_score",
+          "was_reused",
+          "model_name",
+          "model_version",
+          "normalized_address",
+          "features"
+        ],
+        "title": "LiveFeatureCandidateItem"
+      },
+      "LiveFeatureCandidatesResponse": {
+        "properties": {
+          "contract_version": {
+            "type": "string",
+            "title": "Contract Version"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "min_completeness_score": {
+            "type": "number",
+            "title": "Min Completeness Score"
+          },
+          "include_reused": {
+            "type": "boolean",
+            "title": "Include Reused"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LiveFeatureCandidateItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "contract_version",
+          "generated_at",
+          "total",
+          "limit",
+          "offset",
+          "min_completeness_score",
+          "include_reused",
+          "items"
+        ],
+        "title": "LiveFeatureCandidatesResponse"
+      },
+      "NormalizedAddress": {
+        "properties": {
+          "address_line_1": {
+            "type": "string",
+            "title": "Address Line 1"
+          },
+          "address_line_2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Line 2"
+          },
+          "city": {
+            "type": "string",
+            "title": "City"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "postal_code": {
+            "type": "string",
+            "title": "Postal Code"
+          },
+          "country": {
+            "type": "string",
+            "title": "Country"
+          },
+          "formatted_address": {
+            "type": "string",
+            "title": "Formatted Address"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "geocoding_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geocoding Source"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "address_line_1",
+          "city",
+          "state",
+          "postal_code",
+          "country",
+          "formatted_address"
+        ],
+        "title": "NormalizedAddress"
+      },
+      "PredictionDetailResponse": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "prediction_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Prediction Id"
+          },
+          "correlation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Correlation Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "received",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "predicted_price": {
+            "type": "number",
+            "title": "Predicted Price"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": "USD"
+          },
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "feature_snapshot_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Feature Snapshot Id"
+          },
+          "normalized_address": {
+            "$ref": "#/components/schemas/NormalizedAddress"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submitted At"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "was_reused": {
+            "type": "boolean",
+            "title": "Was Reused",
+            "default": false
+          },
+          "source_prediction_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Prediction Id"
+          },
+          "selected_feature_policy_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Feature Policy Name"
+          },
+          "selected_feature_policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Feature Policy Version"
+          },
+          "key_features": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Key Features",
+            "description": "Key property features used for this prediction, e.g. bedrooms, living area sq ft, lot area, bathrooms, year built. Only populated features (non-null) are included."
+          },
+          "feature_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Source",
+            "description": "Data source used to build the feature vector: 'census_context', 'census_context_with_backfill', 'heuristic', or 'fake'. Useful for auditing data quality in production."
+          },
+          "feature_snapshot": {
+            "$ref": "#/components/schemas/FeatureSnapshotSummary"
+          },
+          "provider_responses": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderResponseSummary"
+            },
+            "type": "array",
+            "title": "Provider Responses"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "prediction_id",
+          "correlation_id",
+          "status",
+          "predicted_price",
+          "model_name",
+          "model_version",
+          "feature_snapshot_id",
+          "normalized_address",
+          "submitted_at",
+          "generated_at",
+          "feature_snapshot",
+          "provider_responses"
+        ],
+        "title": "PredictionDetailResponse"
+      },
+      "PredictionListItem": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "prediction_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Prediction Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "received",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "predicted_price": {
+            "type": "number",
+            "title": "Predicted Price"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": "USD"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "normalized_address": {
+            "$ref": "#/components/schemas/NormalizedAddress"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submitted At"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "was_reused": {
+            "type": "boolean",
+            "title": "Was Reused",
+            "default": false
+          },
+          "source_prediction_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Prediction Id"
+          },
+          "requested_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By"
+          },
+          "feature_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Source"
+          },
+          "selected_feature_policy_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Feature Policy Name"
+          },
+          "selected_feature_policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Feature Policy Version"
+          },
+          "key_features": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Key Features"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "prediction_id",
+          "status",
+          "predicted_price",
+          "model_name",
+          "model_version",
+          "normalized_address",
+          "submitted_at",
+          "generated_at"
+        ],
+        "title": "PredictionListItem"
+      },
+      "PredictionListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PredictionListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "default": 10
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PredictionListResponse"
+      },
+      "PredictionRequestPayload": {
+        "properties": {
+          "address_line_1": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Address Line 1"
+          },
+          "address_line_2": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Line 2"
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "City"
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 30,
+            "minLength": 2,
+            "title": "State"
+          },
+          "postal_code": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 3,
+            "title": "Postal Code"
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 60,
+            "minLength": 2,
+            "title": "Country",
+            "default": "US"
+          },
+          "requested_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By"
+          },
+          "preferred_policy_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Policy Name",
+            "description": "Optional feature policy to apply for this specific request. When set, overrides the server-configured default and any state-level policy routing. Must match a known policy name from GET /v1/policies/feature."
+          },
+          "feature_overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Overrides",
+            "description": "Optional map of known feature values to inject before feature assembly. Keys must match expected model feature names (e.g. BedroomAbvGr, GrLivArea). Overrides provider-fetched values for matching keys. Prediction reuse is disabled whenever this field is non-null."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "address_line_1",
+          "city",
+          "state",
+          "postal_code"
+        ],
+        "title": "PredictionRequestPayload"
+      },
+      "PredictionResponse": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "prediction_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Prediction Id"
+          },
+          "correlation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Correlation Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "received",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "predicted_price": {
+            "type": "number",
+            "title": "Predicted Price"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": "USD"
+          },
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "feature_snapshot_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Feature Snapshot Id"
+          },
+          "normalized_address": {
+            "$ref": "#/components/schemas/NormalizedAddress"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submitted At"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "was_reused": {
+            "type": "boolean",
+            "title": "Was Reused",
+            "default": false
+          },
+          "source_prediction_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Prediction Id"
+          },
+          "selected_feature_policy_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Feature Policy Name"
+          },
+          "selected_feature_policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Feature Policy Version"
+          },
+          "key_features": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Key Features",
+            "description": "Key property features used for this prediction, e.g. bedrooms, living area sq ft, lot area, bathrooms, year built. Only populated features (non-null) are included."
+          },
+          "feature_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Source",
+            "description": "Data source used to build the feature vector: 'census_context', 'census_context_with_backfill', 'heuristic', or 'fake'. Useful for auditing data quality in production."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "prediction_id",
+          "correlation_id",
+          "status",
+          "predicted_price",
+          "model_name",
+          "model_version",
+          "feature_snapshot_id",
+          "normalized_address",
+          "submitted_at",
+          "generated_at"
+        ],
+        "title": "PredictionResponse"
+      },
+      "PredictionTraceNode": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "prediction_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Prediction Id"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "was_reused": {
+            "type": "boolean",
+            "title": "Was Reused"
+          },
+          "source_prediction_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Prediction Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "prediction_id",
+          "generated_at",
+          "was_reused"
+        ],
+        "title": "PredictionTraceNode"
+      },
+      "PredictionTraceResponse": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "prediction_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Prediction Id"
+          },
+          "source_prediction_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Prediction Id"
+          },
+          "root_prediction_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Root Prediction Id"
+          },
+          "was_reused": {
+            "type": "boolean",
+            "title": "Was Reused"
+          },
+          "normalized_address": {
+            "$ref": "#/components/schemas/NormalizedAddress"
+          },
+          "feature_snapshot": {
+            "$ref": "#/components/schemas/FeatureSnapshotSummary"
+          },
+          "provider_responses": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderResponseSummary"
+            },
+            "type": "array",
+            "title": "Provider Responses"
+          },
+          "trace_nodes": {
+            "items": {
+              "$ref": "#/components/schemas/PredictionTraceNode"
+            },
+            "type": "array",
+            "title": "Trace Nodes"
+          },
+          "workflow_events": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowEventItem"
+            },
+            "type": "array",
+            "title": "Workflow Events"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "prediction_id",
+          "root_prediction_id",
+          "was_reused",
+          "normalized_address",
+          "feature_snapshot",
+          "provider_responses",
+          "trace_nodes"
+        ],
+        "title": "PredictionTraceResponse"
+      },
+      "PredictionWorkflowEventsResponse": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "prediction_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Prediction Id"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "event_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Name"
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "title": "Sort",
+            "default": "asc"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowEventItem"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "prediction_id",
+          "total_count",
+          "limit",
+          "offset",
+          "events"
+        ],
+        "title": "PredictionWorkflowEventsResponse"
+      },
+      "ProviderPolicySummary": {
+        "properties": {
+          "property_data_provider": {
+            "type": "string",
+            "title": "Property Data Provider"
+          },
+          "geocoding_provider": {
+            "type": "string",
+            "title": "Geocoding Provider"
+          },
+          "provider_timeout_seconds": {
+            "type": "number",
+            "title": "Provider Timeout Seconds"
+          },
+          "provider_max_retries": {
+            "type": "integer",
+            "title": "Provider Max Retries"
+          },
+          "prediction_reuse_max_age_hours": {
+            "type": "integer",
+            "title": "Prediction Reuse Max Age Hours"
+          },
+          "feature_policy_name": {
+            "type": "string",
+            "title": "Feature Policy Name"
+          },
+          "feature_policy_version": {
+            "type": "string",
+            "title": "Feature Policy Version"
+          },
+          "feature_policy_state_overrides": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Feature Policy State Overrides"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "property_data_provider",
+          "geocoding_provider",
+          "provider_timeout_seconds",
+          "provider_max_retries",
+          "prediction_reuse_max_age_hours",
+          "feature_policy_name",
+          "feature_policy_version",
+          "feature_policy_state_overrides"
+        ],
+        "title": "ProviderPolicySummary"
+      },
+      "ProviderResponseSummary": {
+        "properties": {
+          "provider_name": {
+            "type": "string",
+            "title": "Provider Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "fetched_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Fetched At"
+          },
+          "feature_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Source"
+          },
+          "feature_provenance": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Provenance"
+          },
+          "payload_preview": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload Preview"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider_name",
+          "status",
+          "fetched_at",
+          "payload_preview"
+        ],
+        "title": "ProviderResponseSummary"
+      },
+      "RuntimeSummary": {
+        "properties": {
+          "app_name": {
+            "type": "string",
+            "title": "App Name"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "model_available": {
+            "type": "boolean",
+            "title": "Model Available"
+          },
+          "mock_predictor_enabled": {
+            "type": "boolean",
+            "title": "Mock Predictor Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "app_name",
+          "environment",
+          "model_name",
+          "model_version",
+          "model_available",
+          "mock_predictor_enabled"
+        ],
+        "title": "RuntimeSummary"
+      },
+      "ScenarioBatchPipelineRequest": {
+        "properties": {
+          "scenario_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ScenarioBatchPipelineRequest",
+        "description": "Request to run a subset (or all) registered scenarios through the pipeline."
+      },
+      "ScenarioBatchPipelineResponse": {
+        "properties": {
+          "contract_version": {
+            "type": "string",
+            "title": "Contract Version"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Completed At"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "passed": {
+            "type": "integer",
+            "title": "Passed"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "errors": {
+            "type": "integer",
+            "title": "Errors"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ScenarioPipelineResult"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "contract_version",
+          "started_at",
+          "completed_at",
+          "total",
+          "passed",
+          "failed",
+          "errors",
+          "results"
+        ],
+        "title": "ScenarioBatchPipelineResponse",
+        "description": "Aggregated result of a scenario batch pipeline run."
+      },
+      "ScenarioPipelineResult": {
+        "properties": {
+          "scenario_id": {
+            "type": "string",
+            "title": "Scenario Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "pipeline_status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "error"
+            ],
+            "title": "Pipeline Status"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "completeness_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completeness Score"
+          },
+          "predicted_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicted Price"
+          },
+          "key_feature_values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Key Feature Values"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "scenario_id",
+          "label",
+          "category",
+          "pipeline_status",
+          "issues"
+        ],
+        "title": "ScenarioPipelineResult",
+        "description": "Result of running one registered scenario through the full audit pipeline."
+      },
+      "UiLinkTemplates": {
+        "properties": {
+          "predictions_list": {
+            "type": "string",
+            "title": "Predictions List"
+          },
+          "prediction_detail": {
+            "type": "string",
+            "title": "Prediction Detail"
+          },
+          "prediction_trace": {
+            "type": "string",
+            "title": "Prediction Trace"
+          },
+          "prediction_create": {
+            "type": "string",
+            "title": "Prediction Create"
+          },
+          "address_normalize": {
+            "type": "string",
+            "title": "Address Normalize"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "predictions_list",
+          "prediction_detail",
+          "prediction_trace",
+          "prediction_create",
+          "address_normalize"
+        ],
+        "title": "UiLinkTemplates"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WorkflowEventItem": {
+        "properties": {
+          "event_name": {
+            "type": "string",
+            "title": "Event Name"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_name",
+          "payload",
+          "occurred_at"
+        ],
+        "title": "WorkflowEventItem"
+      }
+    }
+  }
+}

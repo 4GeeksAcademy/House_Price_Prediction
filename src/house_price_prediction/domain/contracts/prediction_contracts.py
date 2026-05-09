@@ -1,10 +1,71 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+# ---------------------------------------------------------------------------
+# Feature override validation constants (shared across multiple request types)
+# ---------------------------------------------------------------------------
+
+_NUMERIC_OVERRIDE_FEATURES: frozenset[str] = frozenset({
+    "LotArea", "OverallQual", "OverallCond", "YearBuilt", "YearRemodAdd",
+    "GrLivArea", "FullBath", "HalfBath", "BedroomAbvGr", "TotRmsAbvGrd",
+    "Fireplaces", "GarageCars", "GarageArea", "NeighborhoodScore",
+    "CensusMedianValue", "MedianIncomeK", "OwnerOccupiedRate",
+})
+
+_NUMERIC_OVERRIDE_BOUNDS: dict[str, tuple[float, float]] = {
+    "LotArea": (100, 2_000_000),
+    "OverallQual": (1, 10),
+    "OverallCond": (1, 10),
+    "YearBuilt": (1800, 2030),
+    "YearRemodAdd": (1800, 2030),
+    "GrLivArea": (100, 30_000),
+    "FullBath": (0, 20),
+    "HalfBath": (0, 10),
+    "BedroomAbvGr": (0, 20),
+    "TotRmsAbvGrd": (1, 30),
+    "Fireplaces": (0, 10),
+    "GarageCars": (0, 10),
+    "GarageArea": (0, 10_000),
+    "NeighborhoodScore": (0.0, 100.0),
+    "CensusMedianValue": (10_000, 5_000_000),
+    "MedianIncomeK": (5.0, 1_000.0),
+    "OwnerOccupiedRate": (0.0, 1.0),
+}
+
+
+def _validate_feature_overrides_dict(overrides: dict[str, Any] | None) -> list[str]:
+    """Return a list of validation error messages for the given feature_overrides dict.
+
+    Returns an empty list when all values are valid.
+    """
+    if overrides is None:
+        return []
+    errors: list[str] = []
+    if len(overrides) > 50:
+        return ["feature_overrides may not contain more than 50 keys."]
+    for key, value in overrides.items():
+        if key not in _NUMERIC_OVERRIDE_FEATURES:
+            continue
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            errors.append(
+                f"feature_overrides[{key!r}] must be a number, got {type(value).__name__!r}."
+            )
+            continue
+        if math.isnan(value) or math.isinf(value):
+            errors.append(f"feature_overrides[{key!r}] must be a finite number.")
+            continue
+        lo, hi = _NUMERIC_OVERRIDE_BOUNDS[key]
+        if not (lo <= value <= hi):
+            errors.append(
+                f"feature_overrides[{key!r}] = {value} is outside allowed range [{lo}, {hi}]."
+            )
+    return errors
 
 
 class AddressPayload(BaseModel):
@@ -17,9 +78,62 @@ class AddressPayload(BaseModel):
     postal_code: str = Field(min_length=3, max_length=20)
     country: str = Field(default="US", min_length=2, max_length=60)
 
+    @field_validator("address_line_1", "city", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("state", mode="before")
+    @classmethod
+    def normalize_state(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip().upper()
+        return v
+
+    @field_validator("postal_code", mode="before")
+    @classmethod
+    def normalize_postal_code(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("country", mode="before")
+    @classmethod
+    def normalize_country(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip().upper()
+        return v
+
 
 class PredictionRequestPayload(AddressPayload):
     requested_by: str | None = Field(default=None, max_length=120)
+    preferred_policy_name: str | None = Field(
+        default=None,
+        max_length=80,
+        description=(
+            "Optional feature policy to apply for this specific request. "
+            "When set, overrides the server-configured default and any state-level policy routing. "
+            "Must match a known policy name from GET /v1/policies/feature."
+        ),
+    )
+    feature_overrides: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Optional map of known feature values to inject before feature assembly. "
+            "Keys must match expected model feature names (e.g. BedroomAbvGr, GrLivArea). "
+            "Overrides provider-fetched values for matching keys. "
+            "Prediction reuse is disabled whenever this field is non-null."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_feature_overrides(self) -> "PredictionRequestPayload":
+        errors = _validate_feature_overrides_dict(self.feature_overrides)
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
 
 
 class NormalizedAddress(BaseModel):
@@ -112,6 +226,22 @@ class PredictionResponse(BaseModel):
     source_prediction_id: UUID | None = None
     selected_feature_policy_name: str | None = None
     selected_feature_policy_version: str | None = None
+    key_features: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Key property features used for this prediction, e.g. bedrooms, "
+            "living area sq ft, lot area, bathrooms, year built. "
+            "Only populated features (non-null) are included."
+        ),
+    )
+    feature_source: str | None = Field(
+        default=None,
+        description=(
+            "Data source used to build the feature vector: 'census_context', "
+            "'census_context_with_backfill', 'heuristic', or 'fake'. "
+            "Useful for auditing data quality in production."
+        ),
+    )
 
 
 class PredictionDetailResponse(PredictionResponse):
@@ -172,6 +302,7 @@ class PredictionListItem(BaseModel):
     feature_source: str | None = None
     selected_feature_policy_name: str | None = None
     selected_feature_policy_version: str | None = None
+    key_features: dict[str, Any] = Field(default_factory=dict)
 
 
 class PredictionListResponse(BaseModel):
@@ -228,6 +359,14 @@ class FeatureBoundExpectation(BaseModel):
 
     minimum: float
     maximum: float
+
+    @model_validator(mode="after")
+    def minimum_must_not_exceed_maximum(self) -> FeatureBoundExpectation:
+        if self.minimum > self.maximum:
+            raise ValueError(
+                f"minimum ({self.minimum}) must not exceed maximum ({self.maximum})."
+            )
+        return self
 
 
 class BaselineScenario(BaseModel):
@@ -294,9 +433,44 @@ class BaselineExpectationsInput(BaseModel):
     required_features: list[str] = Field(default_factory=list)
     feature_bounds: dict[str, FeatureBoundExpectation] = Field(default_factory=dict)
 
+    @field_validator("min_completeness_score")
+    @classmethod
+    def completeness_score_must_be_in_unit_interval(
+        cls, v: float | None
+    ) -> float | None:
+        if v is not None and not (0.0 <= v <= 1.0):
+            raise ValueError(
+                f"min_completeness_score must be between 0.0 and 1.0, got {v}."
+            )
+        return v
+
 
 class AddressBaselineRequest(AddressPayload):
     expectations: BaselineExpectationsInput | None = None
+    preferred_policy_name: str | None = Field(
+        default=None,
+        max_length=80,
+        description=(
+            "Optional feature policy to apply for this baseline. "
+            "When set, overrides the server default and any state-level routing. "
+            "Must match a known policy name from GET /v1/policies/feature."
+        ),
+    )
+    feature_overrides: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Optional map of known feature values to inject before feature assembly. "
+            "Keys must match expected model feature names (e.g. BedroomAbvGr, GrLivArea). "
+            "Overrides provider-fetched values for matching keys."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_feature_overrides(self) -> "AddressBaselineRequest":
+        errors = _validate_feature_overrides_dict(self.feature_overrides)
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
 
 
 class BaselineValueObservation(BaseModel):

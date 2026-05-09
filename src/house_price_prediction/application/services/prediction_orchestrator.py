@@ -60,6 +60,9 @@ from house_price_prediction.domain.contracts.prediction_contracts import (
 from house_price_prediction.infrastructure.db.repositories import PredictionRepository
 from house_price_prediction.infrastructure.model_runtime.predictor import PredictionRuntime
 from house_price_prediction.infrastructure.providers.base import GeocodingProvider
+from house_price_prediction.application.services.neighborhood_score_service import (
+    NeighborhoodScoreService,
+)
 from house_price_prediction.telemetry import correlation_scope, get_logger
 
 logger = get_logger(__name__)
@@ -76,6 +79,7 @@ class Brain:
         prediction_reuse_max_age_hours: int,
         provider_response_cache_max_age_hours: int,
         settings: Settings,
+        neighborhood_scorer: NeighborhoodScoreService | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._prediction_runtime = prediction_runtime
@@ -88,6 +92,7 @@ class Brain:
             geocoding_provider=geocoding_provider,
             prediction_reuse_max_age_hours=prediction_reuse_max_age_hours,
             provider_response_cache_max_age_hours=provider_response_cache_max_age_hours,
+            neighborhood_scorer=neighborhood_scorer,
         )
 
     def normalize_address(self, payload: AddressPayload) -> NormalizedAddress:
@@ -203,6 +208,7 @@ class Brain:
                     )
                 )
                 pipeline_status: str = "fail" if audit.issues else "pass"
+                raw_kfv = audit.baseline.features.key_feature_values
                 results.append(
                     ScenarioPipelineResult(
                         scenario_id=scenario.scenario_id,
@@ -212,7 +218,7 @@ class Brain:
                         issues=audit.issues,
                         completeness_score=audit.baseline.features.completeness_score,
                         predicted_price=audit.prediction.predicted_price,
-                        key_feature_values=audit.baseline.features.key_feature_values,
+                        key_feature_values={k: v for k, v in raw_kfv.items() if v is not None},
                     )
                 )
             except Exception as exc:  # noqa: BLE001
@@ -248,13 +254,19 @@ class Brain:
         self,
         payload: AddressPayload,
         expectations: BaselineExpectationsInput | None = None,
+        policy_name_override: str | None = None,
+        feature_overrides: dict | None = None,
     ) -> AddressBaselineResponse:
         return self._data_orchestration_layer.generate_address_baseline(
             payload=payload,
             expectations=expectations,
+            policy_name_override=policy_name_override,
+            feature_overrides=feature_overrides,
         )
 
     def run_full_audit(self, payload: FullAuditRequest) -> FullAuditResponse:
+        # Pass per-request policy and feature overrides to baseline so both the
+        # baseline and the subsequent prediction use the same feature assembly path.
         baseline = self.generate_address_baseline(
             payload=AddressPayload(
                 address_line_1=payload.address_line_1,
@@ -265,6 +277,8 @@ class Brain:
                 country=payload.country,
             ),
             expectations=payload.expectations,
+            policy_name_override=payload.preferred_policy_name,
+            feature_overrides=payload.feature_overrides,
         )
 
         prediction = self.create_prediction(payload)
@@ -274,7 +288,7 @@ class Brain:
             prediction_id=prediction.prediction_id,
             limit=50,
             offset=0,
-            sort="desc",
+            sort="asc",
         )
 
         issues: list[str] = []
@@ -569,6 +583,8 @@ class Brain:
                 source_prediction_id=workflow_result.source_prediction_id,
                 selected_feature_policy_name=workflow_result.selected_feature_policy_name,
                 selected_feature_policy_version=workflow_result.selected_feature_policy_version,
+                key_features=workflow_result.key_features,
+                feature_source=workflow_result.feature_source,
             )
 
     @staticmethod

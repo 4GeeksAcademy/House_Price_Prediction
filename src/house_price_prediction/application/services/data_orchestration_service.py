@@ -15,6 +15,9 @@ from house_price_prediction.application.contracts.orchestration_contracts import
 from house_price_prediction.application.services.feature_assembly_service import (
     FeatureAssemblyService,
 )
+from house_price_prediction.application.services.neighborhood_score_service import (
+    NeighborhoodScoreService,
+)
 from house_price_prediction.application.services.property_enrichment_service import (
     PropertyEnrichmentService,
 )
@@ -33,6 +36,7 @@ from house_price_prediction.domain.contracts.prediction_contracts import (
     ProviderResponseContract,
 )
 from house_price_prediction.infrastructure.db.repositories import PredictionRepository
+from house_price_prediction.feature_schema import KEY_BUYER_FEATURES
 from house_price_prediction.infrastructure.model_runtime.predictor import PredictionRuntime
 from house_price_prediction.infrastructure.providers.base import GeocodingProvider
 from house_price_prediction.infrastructure.providers.resilient import ProviderExecutionError
@@ -53,6 +57,7 @@ class DataOrchestrationLayer:
         geocoding_provider: GeocodingProvider,
         prediction_reuse_max_age_hours: int,
         provider_response_cache_max_age_hours: int,
+        neighborhood_scorer: NeighborhoodScoreService | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._feature_assembly_service = feature_assembly_service
@@ -61,6 +66,7 @@ class DataOrchestrationLayer:
         self._geocoding_provider = geocoding_provider
         self._prediction_reuse_max_age_hours = prediction_reuse_max_age_hours
         self._provider_response_cache_max_age_hours = provider_response_cache_max_age_hours
+        self._neighborhood_scorer = neighborhood_scorer
 
     def normalize_address(self, payload: AddressPayload) -> NormalizedAddress:
         return self._normalize(payload).normalized_address
@@ -75,7 +81,16 @@ class DataOrchestrationLayer:
             normalized_address=normalization_result.normalized_address,
         )
 
-        selected_policy_names = policy_names or list(self._feature_assembly_service.available_policy_names())
+        if policy_names is not None and len(policy_names) == 0:
+            raise ValueError(
+                "policy_names must not be an empty list. "
+                "Omit the field (or send null) to simulate all available policies."
+            )
+        selected_policy_names = (
+            list(self._feature_assembly_service.available_policy_names())
+            if policy_names is None
+            else policy_names
+        )
         available_policy_names = set(self._feature_assembly_service.available_policy_names())
         unique_policy_names: list[str] = []
         for policy_name in selected_policy_names:
@@ -88,14 +103,24 @@ class DataOrchestrationLayer:
         ]
         if unknown_policy_names:
             raise ValueError(
-                "Unsupported feature policy name(s): " + ", ".join(sorted(unknown_policy_names))
+                "Unknown feature policy name(s): " + ", ".join(sorted(unknown_policy_names))
+            )
+
+        if not unique_policy_names:
+            raise ValueError(
+                "No valid policy names remain after normalization. "
+                "Ensure each entry is a non-empty string matching a known policy name."
             )
 
         simulations: list[FeaturePolicySimulationItem] = []
+        enriched_policy_payload = self._inject_neighborhood_score(
+            provider_response.payload,
+            normalization_result.normalized_address,
+        )
         for policy_name in unique_policy_names:
             feature_vector = self._feature_assembly_service.assemble(
                 request_id=uuid4(),
-                provider_payload=provider_response.payload,
+                provider_payload=enriched_policy_payload,
                 context={"state": normalization_result.normalized_address.state},
                 policy_name_override=policy_name,
             )
@@ -124,16 +149,29 @@ class DataOrchestrationLayer:
         self,
         payload: AddressPayload,
         expectations: BaselineExpectationsInput | None = None,
+        policy_name_override: str | None = None,
+        feature_overrides: dict | None = None,
     ) -> AddressBaselineResponse:
         normalization_result = self._normalize(payload)
         provider_response = self._build_property_record_with_cache(
             normalized_address=normalization_result.normalized_address,
         )
 
+        base_payload = provider_response.payload
+        if feature_overrides:
+            base_payload = {**base_payload, **feature_overrides}
+        # Inject NeighborhoodScore from the national ZCTA scorer (unless the
+        # caller already supplied it via feature_overrides).
+        base_payload = self._inject_neighborhood_score(
+            base_payload,
+            normalization_result.normalized_address,
+        )
+
         feature_vector = self._feature_assembly_service.assemble(
             request_id=uuid4(),
-            provider_payload=provider_response.payload,
+            provider_payload=base_payload,
             context={"state": normalization_result.normalized_address.state},
+            policy_name_override=policy_name_override,
         )
         predicted_price = round(
             self._prediction_runtime.predict(feature_vector.features),
@@ -165,17 +203,9 @@ class DataOrchestrationLayer:
             name: feature_vector.features.get(name)
             for name in expected_features
         }
-        key_feature_names = [
-            "BedroomAbvGr",
-            "TotRmsAbvGrd",
-            "GrLivArea",
-            "LotArea",
-            "FullBath",
-            "HalfBath",
-        ]
         key_feature_values = {
             name: feature_values.get(name)
-            for name in key_feature_names
+            for name in KEY_BUYER_FEATURES
         }
 
         checks: list[BaselineCheckResult] = []
@@ -290,11 +320,31 @@ class DataOrchestrationLayer:
         self,
         command: PredictionWorkflowCommand,
     ) -> PredictionWorkflowResult:
+        # Validate preferred_policy_name early — before any I/O.
+        preferred_policy = command.payload.preferred_policy_name
+        if preferred_policy is not None:
+            normalized_preferred = preferred_policy.strip().lower()
+            available_policies = set(self._feature_assembly_service.available_policy_names())
+            if normalized_preferred not in available_policies:
+                raise ValueError(
+                    f"Unknown feature policy: {preferred_policy!r}. "
+                    f"Available policies: {sorted(available_policies)}"
+                )
+
         normalization_result = self._normalize(command.payload)
-        selected_policy_name = self._feature_assembly_service.resolve_policy_for_context(
-            {"state": normalization_result.normalized_address.state}
-        )
+
+        # Resolve the effective policy: per-request override takes priority.
+        if preferred_policy is not None:
+            selected_policy_name = preferred_policy.strip().lower()
+        else:
+            selected_policy_name = self._feature_assembly_service.resolve_policy_for_context(
+                {"state": normalization_result.normalized_address.state}
+            )
         selected_policy_version = self._feature_assembly_service.feature_policy_version
+
+        # Reuse is disabled when the caller provides explicit feature overrides
+        # because the injected values make each request uniquely specified.
+        bypass_reuse = bool(command.payload.feature_overrides)
 
         with self._session_factory() as session:
             repository = PredictionRepository(session)
@@ -304,6 +354,7 @@ class DataOrchestrationLayer:
                 normalization_result=normalization_result,
                 selected_feature_policy_name=selected_policy_name,
                 selected_feature_policy_version=selected_policy_version,
+                bypass_reuse=bypass_reuse,
             )
             self._record_workflow_event(
                 repository=repository,
@@ -337,6 +388,7 @@ class DataOrchestrationLayer:
                         "was_reused": reuse_stage.reusable_prediction is not None,
                         "selected_feature_policy_name": selected_policy_name,
                         "selected_feature_policy_version": selected_policy_version,
+                        "bypass_reuse_by_feature_overrides": bypass_reuse,
                     },
                     occurred_at=datetime.now(UTC),
                 ),
@@ -382,6 +434,21 @@ class DataOrchestrationLayer:
                         ),
                     )
                     session.commit()
+                    reused_features = reusable_prediction.feature_snapshot.features
+                    reused_key_features = {
+                        k: reused_features[k]
+                        for k in KEY_BUYER_FEATURES
+                        if reused_features.get(k) is not None
+                    }
+                    # Recover feature_source from the original provider response payloads.
+                    # The feature snapshot only carries model-aligned features, so
+                    # feature_source (a metadata key) is not stored there.
+                    reused_feature_source: str | None = None
+                    for pr in reusable_prediction.provider_responses:
+                        fs = pr.feature_source
+                        if fs:
+                            reused_feature_source = fs
+                            break
                     return PredictionWorkflowResult(
                         request_id=command.request_id,
                         prediction_id=prediction_id,
@@ -400,6 +467,8 @@ class DataOrchestrationLayer:
                         source_prediction_id=reusable_prediction.prediction_id,
                         selected_feature_policy_name=reusable_prediction.selected_feature_policy_name,
                         selected_feature_policy_version=reusable_prediction.selected_feature_policy_version,
+                        key_features=reused_key_features,
+                        feature_source=reused_feature_source,
                     )
 
                 provider_response = self._build_property_record_with_cache(
@@ -425,10 +494,30 @@ class DataOrchestrationLayer:
                     ),
                 )
 
+                # Merge caller-supplied feature overrides into the provider payload.
+                # Overrides are applied last so they take precedence over provider values.
+                if command.payload.feature_overrides:
+                    enriched_payload = {**provider_response.payload, **command.payload.feature_overrides}
+                else:
+                    enriched_payload = provider_response.payload
+                # Inject NeighborhoodScore from the national ZCTA scorer.
+                # This runs after feature_overrides so the caller can still
+                # supply their own NeighborhoodScore and it will be respected.
+                enriched_payload = self._inject_neighborhood_score(
+                    enriched_payload,
+                    normalization_result.normalized_address,
+                )
+
                 feature_vector = self._feature_assembly_service.assemble(
                     request_id=command.request_id,
-                    provider_payload=provider_response.payload,
+                    provider_payload=enriched_payload,
                     context={"state": normalization_result.normalized_address.state},
+                    policy_name_override=selected_policy_name,
+                )
+                feature_override_keys = (
+                    [k for k in command.payload.feature_overrides if k in feature_vector.features]
+                    if command.payload.feature_overrides
+                    else []
                 )
                 self._record_workflow_event(
                     repository=repository,
@@ -440,6 +529,8 @@ class DataOrchestrationLayer:
                             "feature_count": len(feature_vector.features),
                             "selected_feature_policy_name": feature_vector.feature_policy_name,
                             "selected_feature_policy_version": feature_vector.feature_policy_version,
+                            "feature_override_count": len(feature_override_keys),
+                            "feature_override_keys": feature_override_keys,
                         },
                         occurred_at=datetime.now(UTC),
                     ),
@@ -516,6 +607,11 @@ class DataOrchestrationLayer:
                 )
                 raise
 
+        key_features = {
+            k: feature_vector.features[k]
+            for k in KEY_BUYER_FEATURES
+            if feature_vector.features.get(k) is not None
+        }
         return PredictionWorkflowResult(
             request_id=command.request_id,
             prediction_id=prediction_id,
@@ -534,6 +630,8 @@ class DataOrchestrationLayer:
             source_prediction_id=None,
             selected_feature_policy_name=feature_vector.feature_policy_name,
             selected_feature_policy_version=feature_vector.feature_policy_version,
+            key_features=key_features,
+            feature_source=provider_response.payload.get("feature_source") or None,
         )
 
     def _normalize(self, payload: AddressPayload) -> NormalizationStageResult:
@@ -584,6 +682,7 @@ class DataOrchestrationLayer:
         normalization_result: NormalizationStageResult,
         selected_feature_policy_name: str,
         selected_feature_policy_version: str,
+        bypass_reuse: bool = False,
     ) -> ReuseStageResult:
         normalized_address_id = repository.get_or_create_normalized_address(
             normalization_result.normalized_address
@@ -604,12 +703,16 @@ class DataOrchestrationLayer:
             feature_policy_version=selected_feature_policy_version,
         )
 
-        reusable_prediction = repository.find_reusable_prediction(
-            normalized_address_id=normalized_address_id,
-            model_registry_id=model_registry_id,
-            max_age_hours=self._prediction_reuse_max_age_hours,
-            feature_policy_name=selected_feature_policy_name,
-            feature_policy_version=selected_feature_policy_version,
+        reusable_prediction = (
+            None
+            if bypass_reuse
+            else repository.find_reusable_prediction(
+                normalized_address_id=normalized_address_id,
+                model_registry_id=model_registry_id,
+                max_age_hours=self._prediction_reuse_max_age_hours,
+                feature_policy_name=selected_feature_policy_name,
+                feature_policy_version=selected_feature_policy_version,
+            )
         )
 
         return ReuseStageResult(
@@ -629,3 +732,37 @@ class DataOrchestrationLayer:
             payload=event.payload,
             occurred_at=event.occurred_at,
         )
+
+    def _inject_neighborhood_score(
+        self,
+        payload: dict,
+        normalized_address: NormalizedAddress,
+    ) -> dict:
+        """Inject NeighborhoodScore from the national ZCTA scorer if not already present.
+
+        The provider layer leaves NeighborhoodScore as None so that it never
+        emits a stale or location-unaware estimate.  This method is the single
+        place in the orchestration layer that fills the gap using the national
+        NeighborhoodScoreService backed by 30 k+ US ZCTA centroids.
+
+        Rules:
+        - No-op if the scorer is not loaded (graceful degradation; RF will
+          impute from the training median, which is ~55 for KC area).
+        - No-op if a caller already supplied NeighborhoodScore (e.g. via
+          feature_overrides) — caller-supplied values take precedence.
+        - Logs the injected score at DEBUG level for observability.
+        """
+        if self._neighborhood_scorer is None:
+            return payload
+        if payload.get("NeighborhoodScore") is not None:
+            return payload  # caller override or provider already filled it
+        lat = normalized_address.latitude
+        lon = normalized_address.longitude
+        if lat is None or lon is None:
+            return payload
+        score = round(self._neighborhood_scorer.score(lat, lon), 2)
+        logger.debug(
+            "neighborhood_score_injected lat=%.5f lon=%.5f score=%.2f",
+            lat, lon, score,
+        )
+        return {**payload, "NeighborhoodScore": score}

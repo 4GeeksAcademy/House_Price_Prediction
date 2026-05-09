@@ -1,0 +1,352 @@
+{
+  "98001": {
+    "CensusMedianValue": 483900.0,
+    "MedianIncomeK": 103.34,
+    "OwnerOccupiedRate": 0.7756
+  },
+  "98002": {
+    "CensusMedianValue": 354900.0,
+    "MedianIncomeK": 68.04,
+    "OwnerOccupiedRate": 0.4741
+  },
+  "98003": {
+    "CensusMedianValue": 403200.0,
+    "MedianIncomeK": 67.55,
+    "OwnerOccupiedRate": 0.4735
+  },
+  "98004": {
+    "CensusMedianValue": 1862200.0,
+    "MedianIncomeK": 157.78,
+    "OwnerOccupiedRate": 0.3596
+  },
+  "98005": {
+    "CensusMedianValue": 1242200.0,
+    "MedianIncomeK": 151.3,
+    "OwnerOccupiedRate": 0.5153
+  },
+  "98006": {
+    "CensusMedianValue": 1172500.0,
+    "MedianIncomeK": 185.99,
+    "OwnerOccupiedRate": 0.8048
+  },
+  "98007": {
+    "CensusMedianValue": 865300.0,
+    "MedianIncomeK": 118.63,
+    "OwnerOccupiedRate": 0.3272
+  },
+  "98008": {
+    "CensusMedianValue": 1053500.0,
+    "MedianIncomeK": 164.22,
+    "OwnerOccupiedRate": 0.7176
+  },
+  "98010": {
+    "CensusMedianValue": 787200.0,
+    "MedianIncomeK": 141.58,
+    "OwnerOccupiedRate": 0.8673
+  },
+  "98011": {
+    "CensusMedianValue": 819200.0,
+    "MedianIncomeK": 124.42,
+    "OwnerOccupiedRate": 0.5871
+  },
+  "98014": {
+    "CensusMedianValue": 786900.0,
+    "MedianIncomeK": 149.03,
+    "OwnerOccupiedRate": 0.9082
+  },
+  "98019": {
+    "CensusMedianValue": 681600.0,
+    "MedianIncomeK": 149.48,
+    "OwnerOccupiedRate": 0.9054
+  },
+  "98022": {
+    "CensusMedianValue": 539700.0,
+    "MedianIncomeK": 112.82,
+    "OwnerOccupiedRate": 0.7975
+  },
+  "98023": {
+    "CensusMedianValue": 479100.0,
+    "MedianIncomeK": 98.06,
+    "OwnerOccupiedRate": 0.6554
+  },
+  "98024": {
+    "CensusMedianValue": 923900.0,
+    "MedianIncomeK": 149.04,
+    "OwnerOccupiedRate": 0.8996
+  },
+  "98027": {
+    "CensusMedianValue": 912500.0,
+    "MedianIncomeK": 140.56,
+    "OwnerOccupiedRate": 0.6857
+  },
+  "98028": {
+    "CensusMedianValue": 803000.0,
+    "MedianIncomeK": 132.19,
+    "OwnerOccupiedRate": 0.6871
+  },
+  "98029": {
+    "CensusMedianValue": 909000.0,
+    "MedianIncomeK": 156.43,
+    "OwnerOccupiedRate": 0.6348
+  },
+  "98030": {
+    "CensusMedianValue": 471500.0,
+    "MedianIncomeK": 85.19,
+    "OwnerOccupiedRate": 0.5157
+  },
+  "98031": {
+    "CensusMedianValue": 494400.0,
+    "MedianIncomeK": 98.66,
+    "OwnerOccupiedRate": 0.6633
+  },
+  "98032": {
+    "CensusMedianValue": 432500.0,
+    "MedianIncomeK": 76.68,
+    "OwnerOccupiedRate": 0.3994
+  },
+  "98033": {
+    "CensusMedianValue": 1199900.0,
+    "MedianIncomeK": 163.79,
+    "OwnerOccupiedRate": 0.6337
+  },
+  "98034": {
+    "CensusMedianValue": 813500.0,
+    "MedianIncomeK": 119.81,
+    "OwnerOccupiedRate": 0.6132
+  },
+  "98038": {
+    "CensusMedianValue": 659000.0,
+    "MedianIncomeK": 135.3,
+    "OwnerOccupiedRate": 0.8614
+  },
+  "98039": {
+    "CensusMedianValue": 2000001.0,
+    "MedianIncomeK": 244.74,
+    "OwnerOccupiedRate": 0.8179
+  },
+  "98040": {
+    "CensusMedianValue": 1683600.0,
+    "MedianIncomeK": 190.99,
+    "OwnerOccupiedRate": 0.6797
+  },
+  "98042": {
+    "CensusMedianValue": 568100.0,
+    "MedianIncomeK": 122.71,
+    "OwnerOccupiedRate": 0.8346
+  },
+  "98045": {
+    "CensusMedianValue": 779800.0,
+    "MedianIncomeK": 154.8,
+    "OwnerOccupiedRate": 0.8376
+  },
+  "98052": {
+    "CensusMedianValue": 1043700.0,
+    "MedianIncomeK": 158.46,
+    "OwnerOccupiedRate": 0.4829
+  },
+  "98053": {
+    "CensusMedianValue": 1082000.0,
+    "MedianIncomeK": 171.82,
+    "OwnerOccupiedRate": 0.8557
+  },
+  "98055": {
+    "CensusMedianValue": 496900.0,
+    "MedianIncomeK": 90.53,
+    "OwnerOccupiedRate": 0.5317
+  },
+  "98056": {
+    "CensusMedianValue": 681400.0,
+    "MedianIncomeK": 102.2,
+    "OwnerOccupiedRate": 0.5518
+  },
+  "98058": {
+    "CensusMedianValue": 584900.0,
+    "MedianIncomeK": 106.61,
+    "OwnerOccupiedRate": 0.713
+  },
+  "98059": {
+    "CensusMedianValue": 763800.0,
+    "MedianIncomeK": 126.85,
+    "OwnerOccupiedRate": 0.7701
+  },
+  "98065": {
+    "CensusMedianValue": 815100.0,
+    "MedianIncomeK": 175.75,
+    "OwnerOccupiedRate": 0.8497
+  },
+  "98070": {
+    "CensusMedianValue": 675000.0,
+    "MedianIncomeK": 103.22,
+    "OwnerOccupiedRate": 0.8095
+  },
+  "98072": {
+    "CensusMedianValue": 965300.0,
+    "MedianIncomeK": 157.96,
+    "OwnerOccupiedRate": 0.754
+  },
+  "98074": {
+    "CensusMedianValue": 1113700.0,
+    "MedianIncomeK": 229.1,
+    "OwnerOccupiedRate": 0.8627
+  },
+  "98075": {
+    "CensusMedianValue": 1288200.0,
+    "MedianIncomeK": 234.26,
+    "OwnerOccupiedRate": 0.8723
+  },
+  "98077": {
+    "CensusMedianValue": 1032800.0,
+    "MedianIncomeK": 169.57,
+    "OwnerOccupiedRate": 0.9013
+  },
+  "98092": {
+    "CensusMedianValue": 540200.0,
+    "MedianIncomeK": 112.73,
+    "OwnerOccupiedRate": 0.7433
+  },
+  "98102": {
+    "CensusMedianValue": 1042000.0,
+    "MedianIncomeK": 114.03,
+    "OwnerOccupiedRate": 0.2585
+  },
+  "98103": {
+    "CensusMedianValue": 970100.0,
+    "MedianIncomeK": 122.66,
+    "OwnerOccupiedRate": 0.4334
+  },
+  "98105": {
+    "CensusMedianValue": 1253600.0,
+    "MedianIncomeK": 75.21,
+    "OwnerOccupiedRate": 0.3176
+  },
+  "98106": {
+    "CensusMedianValue": 633900.0,
+    "MedianIncomeK": 94.76,
+    "OwnerOccupiedRate": 0.5514
+  },
+  "98107": {
+    "CensusMedianValue": 896300.0,
+    "MedianIncomeK": 131.56,
+    "OwnerOccupiedRate": 0.4087
+  },
+  "98108": {
+    "CensusMedianValue": 676000.0,
+    "MedianIncomeK": 90.18,
+    "OwnerOccupiedRate": 0.5671
+  },
+  "98109": {
+    "CensusMedianValue": 941100.0,
+    "MedianIncomeK": 124.41,
+    "OwnerOccupiedRate": 0.2188
+  },
+  "98112": {
+    "CensusMedianValue": 1259800.0,
+    "MedianIncomeK": 153.2,
+    "OwnerOccupiedRate": 0.6306
+  },
+  "98115": {
+    "CensusMedianValue": 985000.0,
+    "MedianIncomeK": 141.01,
+    "OwnerOccupiedRate": 0.6061
+  },
+  "98116": {
+    "CensusMedianValue": 873900.0,
+    "MedianIncomeK": 129.92,
+    "OwnerOccupiedRate": 0.5456
+  },
+  "98117": {
+    "CensusMedianValue": 957700.0,
+    "MedianIncomeK": 166.03,
+    "OwnerOccupiedRate": 0.6982
+  },
+  "98118": {
+    "CensusMedianValue": 726800.0,
+    "MedianIncomeK": 106.93,
+    "OwnerOccupiedRate": 0.5783
+  },
+  "98119": {
+    "CensusMedianValue": 953100.0,
+    "MedianIncomeK": 112.86,
+    "OwnerOccupiedRate": 0.4025
+  },
+  "98122": {
+    "CensusMedianValue": 938000.0,
+    "MedianIncomeK": 94.55,
+    "OwnerOccupiedRate": 0.2685
+  },
+  "98125": {
+    "CensusMedianValue": 809000.0,
+    "MedianIncomeK": 89.98,
+    "OwnerOccupiedRate": 0.458
+  },
+  "98126": {
+    "CensusMedianValue": 698800.0,
+    "MedianIncomeK": 108.07,
+    "OwnerOccupiedRate": 0.6104
+  },
+  "98133": {
+    "CensusMedianValue": 690900.0,
+    "MedianIncomeK": 85.06,
+    "OwnerOccupiedRate": 0.4809
+  },
+  "98136": {
+    "CensusMedianValue": 857700.0,
+    "MedianIncomeK": 144.66,
+    "OwnerOccupiedRate": 0.6546
+  },
+  "98144": {
+    "CensusMedianValue": 857100.0,
+    "MedianIncomeK": 97.95,
+    "OwnerOccupiedRate": 0.4673
+  },
+  "98146": {
+    "CensusMedianValue": 595600.0,
+    "MedianIncomeK": 101.05,
+    "OwnerOccupiedRate": 0.6559
+  },
+  "98148": {
+    "CensusMedianValue": 508800.0,
+    "MedianIncomeK": 81.43,
+    "OwnerOccupiedRate": 0.4972
+  },
+  "98155": {
+    "CensusMedianValue": 712200.0,
+    "MedianIncomeK": 124.53,
+    "OwnerOccupiedRate": 0.7097
+  },
+  "98166": {
+    "CensusMedianValue": 732600.0,
+    "MedianIncomeK": 105.01,
+    "OwnerOccupiedRate": 0.6529
+  },
+  "98168": {
+    "CensusMedianValue": 472700.0,
+    "MedianIncomeK": 77.94,
+    "OwnerOccupiedRate": 0.5349
+  },
+  "98177": {
+    "CensusMedianValue": 945900.0,
+    "MedianIncomeK": 153.54,
+    "OwnerOccupiedRate": 0.8469
+  },
+  "98178": {
+    "CensusMedianValue": 591000.0,
+    "MedianIncomeK": 96.88,
+    "OwnerOccupiedRate": 0.6733
+  },
+  "98188": {
+    "CensusMedianValue": 432800.0,
+    "MedianIncomeK": 77.72,
+    "OwnerOccupiedRate": 0.4394
+  },
+  "98198": {
+    "CensusMedianValue": 475100.0,
+    "MedianIncomeK": 76.06,
+    "OwnerOccupiedRate": 0.5368
+  },
+  "98199": {
+    "CensusMedianValue": 1117900.0,
+    "MedianIncomeK": 168.13,
+    "OwnerOccupiedRate": 0.6109
+  }
+}

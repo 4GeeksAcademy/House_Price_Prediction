@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 import pandas as pd
@@ -76,20 +75,52 @@ class PredictionRuntime:
         fireplaces = float(features.get("Fireplaces", 1))
         year_built = float(features.get("YearBuilt", 1995))
         year_remod_add = float(features.get("YearRemodAdd", year_built))
-        neighborhood = str(features.get("Neighborhood", "Unknown"))
         house_style = str(features.get("HouseStyle", "1Story"))
+
+        # Market-context features
+        neighborhood_score = features.get("NeighborhoodScore")
+        census_median_value = features.get("CensusMedianValue")
+        median_income_k = features.get("MedianIncomeK")
+        owner_occupied_rate = features.get("OwnerOccupiedRate")
+        property_type = str(features.get("PropertyType", "single_family"))
 
         age_premium = max(year_built - 1950, 0) * 700
         remodel_premium = max(year_remod_add - year_built, 0) * 220
-        neighborhood_hash = int(
-            hashlib.sha256(neighborhood.encode("utf-8")).hexdigest()[:8],
-            16,
-        )
-        neighborhood_adjustment = (neighborhood_hash % 9 - 4) * 1800
         house_style_adjustment = {
             "2Story": 6000,
             "SLvl": 3500,
         }.get(house_style, 0)
+
+        # Market-context adjustments: included when the provider supplied the values.
+        # Scaled so they contribute meaningfully but don't dominate structural features.
+        # NeighborhoodScore is on a 0–100 scale (not 0–10); 50 is the neutral midpoint.
+        # Range: score 0 → –$22,500, score 100 → +$22,500.
+        neighborhood_score_adjustment = (
+            (float(neighborhood_score) - 50.0) * 450.0
+            if neighborhood_score is not None
+            else 0.0
+        )
+        census_value_adjustment = (
+            (float(census_median_value) - 200_000) * 0.12
+            if census_median_value is not None
+            else 0.0
+        )
+        income_adjustment = (
+            (float(median_income_k) - 50.0) * 200
+            if median_income_k is not None
+            else 0.0
+        )
+        owner_rate_adjustment = (
+            (float(owner_occupied_rate) - 0.6) * 8000
+            if owner_occupied_rate is not None
+            else 0.0
+        )
+        property_type_adjustment = {
+            "luxury": 55000,
+            "multifamily": 25000,
+            "townhouse": 5000,
+            "condo": -8000,
+        }.get(property_type, 0)
 
         predicted_price = (
             50000
@@ -105,7 +136,11 @@ class PredictionRuntime:
             + (fireplaces * 4500)
             + age_premium
             + remodel_premium
-            + neighborhood_adjustment
             + house_style_adjustment
+            + neighborhood_score_adjustment
+            + census_value_adjustment
+            + income_adjustment
+            + owner_rate_adjustment
+            + property_type_adjustment
         )
         return round(predicted_price, 2)

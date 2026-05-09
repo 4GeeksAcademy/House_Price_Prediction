@@ -50,7 +50,11 @@ def create_property_data_provider(settings: Settings) -> PropertyDataProvider:
     if provider_name == "free":
         census_client: PropertyDataProvider = CensusPropertyDataClient()
         if settings.walkscore_api_key:
-            census_client = WalkScoreEnrichmentClient(census_client, settings.walkscore_api_key)
+            census_client = WalkScoreEnrichmentClient(
+                census_client,
+                settings.walkscore_api_key,
+                timeout_seconds=settings.provider_timeout_seconds,
+            )
         return ResilientPropertyDataProvider(
             provider_name=provider_name,
             delegate=census_client,
@@ -66,7 +70,11 @@ def create_property_data_provider(settings: Settings) -> PropertyDataProvider:
             )
         )
         if settings.walkscore_api_key:
-            fallback_chain = WalkScoreEnrichmentClient(fallback_chain, settings.walkscore_api_key)
+            fallback_chain = WalkScoreEnrichmentClient(
+                fallback_chain,
+                settings.walkscore_api_key,
+                timeout_seconds=settings.provider_timeout_seconds,
+            )
         return ResilientPropertyDataProvider(
             provider_name=provider_name,
             delegate=fallback_chain,
