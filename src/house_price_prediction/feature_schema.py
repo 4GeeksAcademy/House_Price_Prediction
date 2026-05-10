@@ -39,6 +39,7 @@ DEFAULT_PREDICTION_FEATURES: tuple[str, ...] = (
     # ── property classification ────────────────────────────────────────
     "PropertyType",      # single_family | condo | townhouse | multifamily | luxury
     "HouseStyle",        # 1Story | 2Story | SFoyer | …
+    "Neighborhood",      # postal-code neighborhood key used for location-aware routing
     # ── neighbourhood / market context (all sourced from US Census ACS at inference)
     # These features are populated at inference for ANY US address via the
     # live Census API, making the model generalise nationally.

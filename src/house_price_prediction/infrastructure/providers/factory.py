@@ -29,6 +29,9 @@ from house_price_prediction.infrastructure.providers.heuristic_property_data_cli
 from house_price_prediction.infrastructure.providers.nominatim_geocoding_client import (
     NominatimGeocodingClient,
 )
+from house_price_prediction.infrastructure.providers.rentcast_property_data_client import (
+    RentcastPropertyDataClient,
+)
 from house_price_prediction.infrastructure.providers.resilient import (
     ResilientGeocodingProvider,
     ResilientPropertyDataProvider,
@@ -48,26 +51,69 @@ def create_property_data_provider(settings: Settings) -> PropertyDataProvider:
             max_retries=settings.provider_max_retries,
         )
     if provider_name == "free":
-        census_client: PropertyDataProvider = CensusPropertyDataClient()
+        # Production chain: RentCast (real property) → Census (tract context) → Heuristic fallback
+        fallback_provider: PropertyDataProvider
+        if settings.rentcast_api_key:
+            fallback_provider = FallbackPropertyDataProvider(
+                providers=(
+                    RentcastPropertyDataClient(
+                        api_key=settings.rentcast_api_key,
+                        base_url=settings.rentcast_api_base_url,
+                        timeout_seconds=settings.provider_timeout_seconds,
+                    ),
+                    CensusPropertyDataClient(
+                        fallback_provider=HeuristicPropertyDataClient()
+                    ),
+                    HeuristicPropertyDataClient(),
+                )
+            )
+        else:
+            # No RentCast: Census → Heuristic
+            fallback_provider = FallbackPropertyDataProvider(
+                providers=(
+                    CensusPropertyDataClient(
+                        fallback_provider=HeuristicPropertyDataClient()
+                    ),
+                    HeuristicPropertyDataClient(),
+                )
+            )
+
+        free_chain: PropertyDataProvider = fallback_provider
         if settings.walkscore_api_key:
-            census_client = WalkScoreEnrichmentClient(
-                census_client,
+            free_chain = WalkScoreEnrichmentClient(
+                free_chain,
                 settings.walkscore_api_key,
                 timeout_seconds=settings.provider_timeout_seconds,
             )
         return ResilientPropertyDataProvider(
             provider_name=provider_name,
-            delegate=census_client,
+            delegate=free_chain,
             timeout_seconds=settings.provider_timeout_seconds,
             max_retries=settings.provider_max_retries,
         )
     if provider_name == "free-fallback":
-        fallback_chain: PropertyDataProvider = FallbackPropertyDataProvider(
-            providers=(
-                CensusPropertyDataClient(fallback_provider=HeuristicPropertyDataClient()),
-                HeuristicPropertyDataClient(),
-                FakePropertyDataClient(),
+        census_backfill: PropertyDataProvider
+        if settings.rentcast_api_key:
+            census_backfill = FallbackPropertyDataProvider(
+                providers=(
+                    RentcastPropertyDataClient(
+                        api_key=settings.rentcast_api_key,
+                        base_url=settings.rentcast_api_base_url,
+                        timeout_seconds=settings.provider_timeout_seconds,
+                    ),
+                    HeuristicPropertyDataClient(),
+                )
             )
+        else:
+            census_backfill = HeuristicPropertyDataClient()
+
+        providers: list[PropertyDataProvider] = [
+            CensusPropertyDataClient(fallback_provider=census_backfill),
+            HeuristicPropertyDataClient(),
+            FakePropertyDataClient(),
+        ]
+        fallback_chain: PropertyDataProvider = FallbackPropertyDataProvider(
+            providers=tuple(providers)
         )
         if settings.walkscore_api_key:
             fallback_chain = WalkScoreEnrichmentClient(
@@ -94,10 +140,15 @@ def create_geocoding_provider(settings: Settings) -> GeocodingProvider:
             max_retries=settings.provider_max_retries,
         )
     if provider_name == "free":
+        # Nominatim → Census → Fake (state centroid) for resilience
         return ResilientGeocodingProvider(
             provider_name=provider_name,
             delegate=FallbackGeocodingProvider(
-                providers=(NominatimGeocodingClient(), CensusGeocodingClient())
+                providers=(
+                    NominatimGeocodingClient(),
+                    CensusGeocodingClient(),
+                    FakeGeocodingClient(),  # Fallback to state centroid if primary sources fail
+                )
             ),
             timeout_seconds=settings.provider_timeout_seconds,
             max_retries=settings.provider_max_retries,

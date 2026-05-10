@@ -234,6 +234,20 @@ class PredictionResponse(BaseModel):
             "Only populated features (non-null) are included."
         ),
     )
+    exact_house_features: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Caller-supplied exact property facts for this prediction. "
+            "These are the only home facts the UI should treat as factual."
+        ),
+    )
+    actual_house_features: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Full populated feature payload used by model inference for this property. "
+            "Includes all non-null model features, not just buyer-facing highlights."
+        ),
+    )
     feature_source: str | None = Field(
         default=None,
         description=(
@@ -242,12 +256,51 @@ class PredictionResponse(BaseModel):
             "Useful for auditing data quality in production."
         ),
     )
+    feature_provenance: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Metadata describing where features came from (provider payload lineage, "
+            "fallback markers, and source-specific notes)."
+        ),
+    )
 
 
 class PredictionDetailResponse(PredictionResponse):
     feature_snapshot: FeatureSnapshotSummary
     provider_responses: list[ProviderResponseSummary]
     error_message: str | None = None
+
+
+class PropertyFeaturesResponse(BaseModel):
+    """Response containing exact property features for a location.
+    
+    Includes all physical property characteristics and neighborhood signals
+    from real data sources (Census enrichment, property databases, etc.).
+    Features include `feature_source` and `feature_provenance` indicating
+    data origin (real vs. estimated/fallback).
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    normalized_address_id: UUID
+    features: dict[str, Any] = Field(
+        ...,
+        description="Exact property features (bedrooms, sqft, lot size, Quality, etc.)",
+    )
+    feature_source: str | None = Field(
+        default=None,
+        description="Data source for features: 'census_context', 'property_database', 'fake', etc.",
+    )
+    feature_provenance: dict[str, Any] | None = Field(
+        default=None,
+        description="Metadata about feature origins and data lineage.",
+    )
+    fetched_at: datetime
+    completeness_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of expected features populated (0.0 to 1.0).",
+    )
 
 
 class PredictionTraceNode(BaseModel):
@@ -303,6 +356,7 @@ class PredictionListItem(BaseModel):
     selected_feature_policy_name: str | None = None
     selected_feature_policy_version: str | None = None
     key_features: dict[str, Any] = Field(default_factory=dict)
+    exact_house_features: dict[str, Any] = Field(default_factory=dict)
 
 
 class PredictionListResponse(BaseModel):

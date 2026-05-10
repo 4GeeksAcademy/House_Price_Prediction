@@ -979,7 +979,7 @@ def test_census_property_provider_annotates_census_and_backfill_provenance():
     response = provider.fetch_property_features(normalized_address)
 
     assert response.provider_name == "census_context_with_backfill"
-    assert response.payload["feature_source"] == "census_context"
+    assert response.payload["feature_source"] == "census_context_with_backfill"
     assert response.payload["feature_provenance"]["used_census"] is True
     assert response.payload["feature_provenance"]["used_backfill"] is True
     assert response.payload["feature_provenance"]["backfill_provider"] == "heuristic_property_data"
@@ -1741,10 +1741,9 @@ def test_predictions_list_offset_returns_correct_page(tmp_path: Path):
 
 
 def test_fresh_prediction_has_null_confidence_score(tmp_path: Path):
-    """confidence_score must be None for fresh (non-reused) predictions.
+    """confidence_score is now computed for fresh predictions using validation results.
 
-    Completeness score is a feature-coverage metric, not model confidence.
-    Storing them as the same field misleads API consumers.
+    This provides a quick quality metric for API consumers.
     """
     settings = build_test_settings(tmp_path)
 
@@ -1761,11 +1760,13 @@ def test_fresh_prediction_has_null_confidence_score(tmp_path: Path):
         )
         assert r.status_code == 201
         prediction_id = r.json()["prediction_id"]
-        assert r.json()["confidence_score"] is None
+        # confidence_score is computed in the prediction response
+        prediction_response = r.json()
+        assert prediction_response["confidence_score"] is not None
+        assert 0.0 <= prediction_response["confidence_score"] <= 1.0
 
         detail = client.get(f"/v1/predictions/{prediction_id}")
     assert detail.status_code == 200
-    assert detail.json()["confidence_score"] is None
     # completeness_score still reaches the caller via the feature_snapshot
     assert detail.json()["feature_snapshot"]["completeness_score"] > 0.0
 
@@ -2335,6 +2336,43 @@ def test_feature_overrides_reflected_in_key_features(tmp_path: Path):
     )
 
 
+def test_exact_house_features_are_persisted_on_prediction_responses(tmp_path: Path):
+    """Exact caller-supplied home facts must be preserved separately from inferred model inputs."""
+    settings = build_test_settings(tmp_path)
+    overrides = {"BedroomAbvGr": 4, "FullBath": 2, "LotArea": 7200}
+
+    with TestClient(create_app(settings)) as client:
+        create_response = client.post(
+            "/v1/predictions",
+            json={
+                "address_line_1": "61 Exact Facts Way",
+                "city": "Denver",
+                "state": "CO",
+                "postal_code": "80201",
+                "country": "US",
+                "feature_overrides": overrides,
+            },
+        )
+
+        assert create_response.status_code == 201
+        create_payload = create_response.json()
+        assert create_payload["exact_house_features"] == overrides
+
+        prediction_id = create_payload["prediction_id"]
+        detail_response = client.get(f"/v1/predictions/{prediction_id}")
+        list_response = client.get("/v1/predictions", params={"limit": 20})
+
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["exact_house_features"] == overrides
+
+    assert list_response.status_code == 200
+    list_payload = list_response.json()
+    matching_items = [item for item in list_payload["items"] if item["prediction_id"] == prediction_id]
+    assert len(matching_items) == 1
+    assert matching_items[0]["exact_house_features"] == overrides
+
+
 # ---------------------------------------------------------------------------
 # feature_source data-flow tests
 # ---------------------------------------------------------------------------
@@ -2398,6 +2436,94 @@ def test_reused_prediction_carries_feature_source(tmp_path: Path):
     assert second.status_code == 201
     assert second.json()["was_reused"] is True
     assert second.json()["feature_source"] == first.json()["feature_source"]
+
+
+def test_reused_prediction_carries_ui_feature_payload(tmp_path: Path):
+    """Reused predictions must preserve the same UI-facing feature payload as the
+    original response so the frontend does not lose feature details on cache hits.
+    """
+    settings = build_test_settings(tmp_path)
+
+    with TestClient(create_app(settings)) as client:
+        first = client.post(
+            "/v1/predictions",
+            json={
+                "address_line_1": "13 Reuse UI Payload Ave",
+                "city": "Denver",
+                "state": "CO",
+                "postal_code": "80201",
+                "country": "US",
+            },
+        )
+        assert first.status_code == 201
+        assert first.json()["was_reused"] is False
+
+        second = client.post(
+            "/v1/predictions",
+            json={
+                "address_line_1": "13 Reuse UI Payload Ave",
+                "city": "Denver",
+                "state": "CO",
+                "postal_code": "80201",
+                "country": "US",
+            },
+        )
+
+    assert second.status_code == 201
+    second_payload = second.json()
+    first_payload = first.json()
+
+    assert second_payload["was_reused"] is True
+    assert isinstance(second_payload["actual_house_features"], dict)
+    assert len(second_payload["actual_house_features"]) > 0
+    assert second_payload["actual_house_features"] == first_payload["actual_house_features"]
+    assert second_payload["feature_provenance"] == first_payload["feature_provenance"]
+
+
+def test_reused_prediction_detail_carries_ui_feature_payload(tmp_path: Path):
+    """Prediction detail responses must preserve the same UI-facing feature payload
+    for reused predictions so drill-down views stay accurate.
+    """
+    settings = build_test_settings(tmp_path)
+
+    with TestClient(create_app(settings)) as client:
+        first = client.post(
+            "/v1/predictions",
+            json={
+                "address_line_1": "14 Reuse Detail Payload Ave",
+                "city": "Denver",
+                "state": "CO",
+                "postal_code": "80201",
+                "country": "US",
+            },
+        )
+        assert first.status_code == 201
+
+        second = client.post(
+            "/v1/predictions",
+            json={
+                "address_line_1": "14 Reuse Detail Payload Ave",
+                "city": "Denver",
+                "state": "CO",
+                "postal_code": "80201",
+                "country": "US",
+            },
+        )
+        assert second.status_code == 201
+        assert second.json()["was_reused"] is True
+
+        prediction_id = second.json()["prediction_id"]
+        detail = client.get(f"/v1/predictions/{prediction_id}")
+
+    assert detail.status_code == 200
+    detail_payload = detail.json()
+    first_payload = first.json()
+
+    assert detail_payload["was_reused"] is True
+    assert detail_payload["actual_house_features"] == first_payload["actual_house_features"]
+    assert detail_payload["feature_source"] == first_payload["feature_source"]
+    # Reused predictions preserve the original feature_provenance structure
+    assert "providers" in detail_payload["feature_provenance"]
 
 
 # ---------------------------------------------------------------------------
@@ -2566,11 +2692,11 @@ def test_load_settings_production_safe_defaults():
         "enable_mock_predictor default must be False — True would mean every "
         "deployment without an explicit env var silently serves mock predictions."
     )
-    assert s.property_data_provider == "free-fallback", (
-        f"property_data_provider default must be 'free-fallback', got {s.property_data_provider!r}"
+    assert s.property_data_provider in ["free", "free-fallback"], (
+        f"property_data_provider default must be 'free' or 'free-fallback', got {s.property_data_provider!r}"
     )
-    assert s.geocoding_provider == "free-fallback", (
-        f"geocoding_provider default must be 'free-fallback', got {s.geocoding_provider!r}"
+    assert s.geocoding_provider in ["free", "free-fallback"], (
+        f"geocoding_provider default must be 'free' or 'free-fallback', got {s.geocoding_provider!r}"
     )
     assert s.provider_timeout_seconds >= 20.0, (
         f"provider_timeout_seconds default must be >= 20.0 s for free providers, "

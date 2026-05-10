@@ -215,19 +215,19 @@ def main() -> None:
         status_code, body = _post_prediction(args.base_url, address, timeout=args.timeout)
 
         predicted_price = body.get("predicted_price")
-        feature_source = (
-            body.get("feature_snapshot", {}).get("features", {}).get("feature_source")
-            or body.get("provider_summary", {}).get("feature_source")
-            or "—"
-        )
-        completeness = body.get("feature_snapshot", {}).get("completeness_score")
+        actual_house_features = body.get("actual_house_features") if isinstance(body.get("actual_house_features"), dict) else {}
+        feature_source = body.get("feature_source") or body.get("provider_summary", {}).get("feature_source") or "—"
+        completeness = None
+        if actual_house_features:
+            completeness = sum(1 for value in actual_house_features.values() if value is not None) / max(len(actual_house_features), 1)
 
         if status_code in (200, 201) and predicted_price is not None:
             succeeded += 1
             flag = "✓"
             price_str = f"${predicted_price:,.0f}" if isinstance(predicted_price, (int, float)) else str(predicted_price)
             score_str = f"  completeness={completeness:.2f}" if isinstance(completeness, float) else ""
-            print(f"         {flag} {price_str}  source={feature_source}{score_str}")
+            feature_count = len(actual_house_features) if actual_house_features else len(body.get("key_features", {}) or {})
+            print(f"         {flag} {price_str}  source={feature_source}  features={feature_count}{score_str}")
         else:
             failed += 1
             flag = "✗"
@@ -243,6 +243,8 @@ def main() -> None:
             "predicted_price": predicted_price,
             "feature_source": feature_source,
             "completeness_score": completeness,
+            "actual_house_features": actual_house_features,
+            "feature_provenance": body.get("feature_provenance"),
             "ok": status_code in (200, 201) and predicted_price is not None,
         })
 

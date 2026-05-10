@@ -71,6 +71,7 @@ class PredictionRepository:
                 normalized_address=normalized_address.formatted_address,
                 feature_policy_name=feature_policy_name,
                 feature_policy_version=feature_policy_version,
+                exact_house_features=dict(payload.feature_overrides or {}),
                 status="received",
                 submitted_at=submitted_at,
             )
@@ -313,6 +314,14 @@ class PredictionRepository:
             if isinstance(trace_feature_snapshot.features, dict)
             else {}
         )
+        actual_house_features = {
+            name: value
+            for name, value in trace_features.items()
+            if value is not None
+        }
+        exact_house_features = dict(request.exact_house_features or {})
+        feature_source = self._find_feature_source(provider_responses)
+        feature_provenance = self._find_feature_provenance(provider_responses)
         return PredictionDetailResponse(
             request_id=UUID(request.id),
             prediction_id=UUID(prediction.id),
@@ -339,7 +348,11 @@ class PredictionRepository:
             selected_feature_policy_name=request.feature_policy_name,
             selected_feature_policy_version=request.feature_policy_version,
             error_message=request.error_message,
+            exact_house_features=exact_house_features,
             key_features=_extract_key_features(trace_features),
+            actual_house_features=actual_house_features,
+            feature_source=feature_source,
+            feature_provenance=feature_provenance,
         )
 
     def list_recent_predictions(self, limit: int = 10, offset: int = 0) -> PredictionListResponse:
@@ -470,6 +483,7 @@ class PredictionRepository:
                     selected_feature_policy_name=request.feature_policy_name,
                     selected_feature_policy_version=request.feature_policy_version,
                     key_features=key_features,
+                    exact_house_features=dict(request.exact_house_features or {}),
                 )
             )
 
@@ -829,6 +843,16 @@ class PredictionRepository:
             feature_source = provider_response.payload.get("feature_source")
             if isinstance(feature_source, str):
                 return feature_source
+        return None
+
+    @staticmethod
+    def _find_feature_provenance(
+        provider_responses: list[ProviderResponseContract],
+    ) -> dict[str, Any] | None:
+        for provider_response in reversed(provider_responses):
+            feature_provenance = provider_response.payload.get("feature_provenance")
+            if isinstance(feature_provenance, dict):
+                return feature_provenance
         return None
 
     def _resolve_trace_prediction(

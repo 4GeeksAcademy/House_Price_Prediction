@@ -31,6 +31,7 @@ class PredictionRequestModel(Base):
     normalized_address: Mapped[str] = mapped_column(Text, nullable=False)
     feature_policy_name: Mapped[str] = mapped_column(String(80), nullable=False)
     feature_policy_version: Mapped[str] = mapped_column(String(30), nullable=False)
+    exact_house_features: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="received")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

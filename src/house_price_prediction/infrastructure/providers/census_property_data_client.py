@@ -19,6 +19,45 @@ logger = get_logger(__name__)
 
 
 class CensusPropertyDataClient:
+    _STATE_FIPS_TO_ABBR: dict[str, str] = {
+        "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA", "08": "CO",
+        "09": "CT", "10": "DE", "11": "DC", "12": "FL", "13": "GA", "15": "HI",
+        "16": "ID", "17": "IL", "18": "IN", "19": "IA", "20": "KS", "21": "KY",
+        "22": "LA", "23": "ME", "24": "MD", "25": "MA", "26": "MI", "27": "MN",
+        "28": "MS", "29": "MO", "30": "MT", "31": "NE", "32": "NV", "33": "NH",
+        "34": "NJ", "35": "NM", "36": "NY", "37": "NC", "38": "ND", "39": "OH",
+        "40": "OK", "41": "OR", "42": "PA", "44": "RI", "45": "SC", "46": "SD",
+        "47": "TN", "48": "TX", "49": "UT", "50": "VT", "51": "VA", "53": "WA",
+        "54": "WV", "55": "WI", "56": "WY",
+    }
+    _STATE_MEDIAN_HOME_VALUE: dict[str, int] = {
+        "WA": 575000, "CA": 790000, "HI": 835000, "MA": 620000, "CO": 580000,
+        "OR": 480000, "NJ": 520000, "NY": 550000, "UT": 520000, "AZ": 430000,
+        "FL": 415000, "GA": 330000, "TX": 355000, "NC": 330000, "IL": 315000,
+        "OH": 265000, "PA": 295000, "MI": 265000, "TN": 335000, "VA": 450000,
+        "MD": 435000, "NV": 430000, "ID": 430000, "MN": 335000, "WI": 290000,
+        "IN": 250000, "MO": 270000, "SC": 320000, "AL": 255000, "KY": 255000,
+        "OK": 235000, "AR": 235000, "MS": 215000, "IA": 245000, "KS": 255000,
+        "NE": 280000, "SD": 260000, "ND": 265000, "NM": 320000, "LA": 260000,
+        "MT": 415000, "WV": 200000, "AK": 410000, "DC": 720000, "CT": 435000,
+        "RI": 470000, "NH": 455000, "VT": 420000, "ME": 400000, "DE": 395000,
+        "WY": 355000,
+    }
+    _STATE_MEDIAN_INCOME: dict[str, int] = {
+        "WA": 95000, "CA": 91000, "HI": 88000, "MA": 96000, "CO": 89000,
+        "OR": 78000, "NJ": 97000, "NY": 82000, "UT": 85000, "AZ": 72000,
+        "FL": 67000, "GA": 71000, "TX": 73000, "NC": 68000, "IL": 75000,
+        "OH": 66000, "PA": 72000, "MI": 67000, "TN": 66000, "VA": 90000,
+        "MD": 98000, "NV": 70000, "ID": 70000, "MN": 84000, "WI": 72000,
+        "IN": 65000, "MO": 66000, "SC": 64000, "AL": 59000, "KY": 60000,
+        "OK": 60000, "AR": 57000, "MS": 52000, "IA": 68000, "KS": 67000,
+        "NE": 70000, "SD": 65000, "ND": 71000, "NM": 58000, "LA": 57000,
+        "MT": 65000, "WV": 51000, "AK": 82000, "DC": 101000, "CT": 90000,
+        "RI": 77000, "NH": 92000, "VT": 72000, "ME": 68000, "DE": 76000,
+        "WY": 68000,
+    }
+    _DEFAULT_OWNER_OCCUPIED_RATE: float = 0.65
+
     def __init__(
         self,
         fallback_provider: PropertyDataProvider | None = None,
@@ -55,9 +94,13 @@ class CensusPropertyDataClient:
             census_context = self._fetch_census_context(geography)
             derived_features = self._derive_features(census_context, geography)
 
-            payload = dict(fallback_response.payload) if fallback_response else {}
+            used_backfill = fallback_response is not None
+            payload = dict(fallback_response.payload) if used_backfill else {}
             payload.update(derived_features)
-            payload["feature_source"] = "census_context"
+            payload["Neighborhood"] = normalized_address.postal_code or payload.get("Neighborhood")
+            payload["feature_source"] = (
+                "census_context_with_backfill" if used_backfill else "census_context"
+            )
             payload["feature_provenance"] = self._build_feature_provenance(
                 fallback_response=fallback_response,
                 geography=geography,
@@ -81,6 +124,7 @@ class CensusPropertyDataClient:
                     normalized_address.longitude,
                 )
                 payload = dict(fallback_response.payload)
+                payload["Neighborhood"] = normalized_address.postal_code or payload.get("Neighborhood")
                 payload["feature_provenance"] = self._build_feature_provenance(
                     fallback_response=fallback_response,
                     geography=None,
@@ -163,12 +207,22 @@ class CensusPropertyDataClient:
         census_context: dict[str, str],
         geography: dict[str, str],
     ) -> dict[str, int | float | str | None]:
-        # Core housing signals
-        median_home_value = self._safe_int(census_context.get("B25077_001E"))
-        median_year_built = self._safe_int(census_context.get("B25035_001E"))
-        median_rooms = self._safe_float(census_context.get("B25018_001E"))
+        """
+        Enrich property features with Census data.
+        
+        CRITICAL: This function must ONLY provide Census-sourced enrichment
+        (CensusMedianValue, MedianIncomeK, OwnerOccupiedRate). It must NOT derive
+        or estimate physical property features (bedrooms, sqft, lot size, etc.).
+        
+        Physical features must come from actual property data sources (real databases,
+        user input, or third-party APIs). Using Census demographic data to guess
+        property characteristics degrades data accuracy and breaks UI trust.
+        """
+        state = self._resolve_state_abbr(geography.get("state"))
 
-        # Extended neighborhood signals
+        # Core economic signals from Census tract, with state-level fallback when
+        # tract-level ACS values are unavailable.
+        median_home_value = self._safe_int(census_context.get("B25077_001E"))
         median_income = self._safe_int(census_context.get("B19013_001E"))
         median_rent = self._safe_int(census_context.get("B25064_001E"))
         total_units = self._safe_int(census_context.get("B25003_001E"))
@@ -176,95 +230,71 @@ class CensusPropertyDataClient:
         rent_burden_pct = self._safe_float(census_context.get("B25071_001E"))
         tract_population = self._safe_int(census_context.get("B01003_001E"))
 
-        # Derived signals
+        # Compute owner occupancy rate (neighborhood signal only, not for individual property)
         owner_rate: float | None = (
             owner_units / total_units if total_units and owner_units else None
         )
-        # Persons-per-unit proxy for density (US avg ~2.5; urban < 2.0; suburban > 3.0)
+
+        median_home_value_source = "tract_acs"
+        if median_home_value is None or median_home_value <= 0:
+            median_home_value = self._STATE_MEDIAN_HOME_VALUE.get(state)
+            median_home_value_source = (
+                "state_fallback" if median_home_value is not None else "unavailable"
+            )
+
+        median_income_source = "tract_acs"
+        if median_income is None or median_income <= 0:
+            median_income = self._STATE_MEDIAN_INCOME.get(state)
+            median_income_source = (
+                "state_fallback" if median_income is not None else "unavailable"
+            )
+
+        owner_rate_source = "tract_acs"
+        if owner_rate is None:
+            owner_rate = self._DEFAULT_OWNER_OCCUPIED_RATE
+            owner_rate_source = "state_default"
+
+        # Persons-per-unit is a neighborhood density signal, NOT an individual property feature
         persons_per_unit: float | None = (
             tract_population / total_units if tract_population and total_units else None
         )
 
-        total_rooms = self._clamp(int(round(median_rooms)) if median_rooms is not None else 6, 4, 11)
-        bedrooms = self._clamp(max(total_rooms // 2, 2), 2, 6)
-
-        # OverallQual: calibrated with both home value AND median income tier
-        value_tier = int((median_home_value or 200000) / 150000)
-        income_tier = int((median_income or 60000) / 75000)
-        overall_qual = self._clamp(4 + value_tier + income_tier, 4, 10)
-
-        overall_cond = self._clamp(
-            5 + (1 if (median_year_built or 1980) >= 1995 else 0),
-            4,
-            9,
-        )
-
-        # GarageCars: owner-occupancy rate is a strong predictor of garage availability
-        if owner_rate is not None:
-            if owner_rate >= 0.65:
-                garage_cars = 2          # mostly owners, suburban → 2-car
-            elif owner_rate >= 0.40:
-                garage_cars = 1          # mixed tenure → 1-car
-            else:
-                garage_cars = 1          # mostly renters → shared or 1-car
-        else:
-            garage_cars = 2 if (median_home_value or 0) >= 250000 else 1
-
-        # LotArea: density-adjusted (denser areas = smaller lots)
-        base_lot = self._clamp(int((median_home_value or 180000) / 20), 4500, 18000)
-        if persons_per_unit is not None:
-            if persons_per_unit < 2.0:
-                density_mult = 0.55      # urban / high-turnover tract
-            elif persons_per_unit >= 3.0:
-                density_mult = 1.30      # suburban / family-oriented tract
-            else:
-                density_mult = 1.0
-            lot_area = self._clamp(int(base_lot * density_mult), 2000, 25000)
-        else:
-            lot_area = base_lot
-
-        # GrLivArea: income bonus captures higher-income areas' larger floor plans
-        income_sqft_bonus = int((median_income or 60000) / 1500) if median_income else 0
-        gr_liv_area = self._clamp(total_rooms * 340 + income_sqft_bonus, 900, 3200)
-
-        # HouseStyle: renter-dominated / urban tracts skew to 2-story / multi-unit forms
-        house_style = "2Story" if (owner_rate is not None and owner_rate < 0.45) else "1Story"
-
-        # Build the partial payload so PropertyType classifier can see all signals
-        partial: dict = {
-            "LotArea": lot_area,
-            "OverallQual": overall_qual,
-            "OverallCond": overall_cond,
-            "YearBuilt": self._clamp(median_year_built or 1985, 1960, 2022),
-            "YearRemodAdd": self._clamp((median_year_built or 1985) + 10, 1970, 2024),
-            "GrLivArea": gr_liv_area,
-            "FullBath": 2 if total_rooms >= 6 else 1,
-            "HalfBath": 1 if total_rooms >= 7 else 0,
-            "BedroomAbvGr": bedrooms,
-            "TotRmsAbvGrd": total_rooms,
-            "Fireplaces": 1 if (median_home_value or 0) >= 300000 else 0,
-            "GarageCars": garage_cars,
-            "GarageArea": garage_cars * 260,
-            "BasementSF": 0,
-            "Waterfront": 0,
-            "ViewScore": 0,
-            "HouseStyle": house_style,
-            # ── new model features surfaced from census context ──────────
+        # Return ONLY Census enrichment data; physical features come from fallback provider
+        enrichment: dict[str, int | float | str | None] = {
+            # ── Census-sourced neighborhood economic context ──────────────
             "CensusMedianValue": median_home_value,
             "MedianIncomeK": round(median_income / 1000.0, 1) if median_income else None,
             "OwnerOccupiedRate": round(owner_rate, 3) if owner_rate is not None else None,
-            # NeighborhoodScore is computed at training/inference time by
-            # NeighborhoodScoreService (KNN); set None so providers don't guess.
+            # NeighborhoodScore is computed at inference time by NeighborhoodScoreService (KNN);
+            # Census provider does not compute it.
             "NeighborhoodScore": None,
-            # ── enrichment context (observability, not consumed by the model) ──
+            "census_median_value_source": median_home_value_source,
+            "census_median_income_source": median_income_source,
+            "census_owner_occupancy_source": owner_rate_source,
+            # ── metadata for observability only (not consumed by model) ────
             "census_median_income": median_income,
             "census_median_rent": median_rent,
             "census_owner_occupancy_rate": round(owner_rate, 3) if owner_rate is not None else None,
             "census_rent_burden_pct": rent_burden_pct,
             "census_tract_population": tract_population,
+            "census_persons_per_unit": round(persons_per_unit, 2) if persons_per_unit is not None else None,
         }
-        partial["PropertyType"] = classify_property_type(partial)
-        return partial
+
+        return enrichment
+
+    @classmethod
+    def _resolve_state_abbr(cls, state: str | None) -> str:
+        raw_state = (state or "").strip().upper()
+        if len(raw_state) == 2 and raw_state.isalpha():
+            return raw_state
+        if raw_state.isdigit():
+            return cls._STATE_FIPS_TO_ABBR.get(raw_state.zfill(2), raw_state)
+        try:
+            numeric_state = int(float(raw_state))
+            return cls._STATE_FIPS_TO_ABBR.get(f"{numeric_state:02d}", raw_state)
+        except (TypeError, ValueError):
+            pass
+        return raw_state
 
     @staticmethod
     def _build_feature_provenance(

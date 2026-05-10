@@ -4,6 +4,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import sys
 
 import joblib
 import numpy as np
@@ -215,9 +216,50 @@ def load_model_artifact(model_path: Path) -> TrainedModelArtifact:
         raise FileNotFoundError(
             f"Model artifact not found at {model_path}. Train first using scripts/train.py."
         )
-    obj = joblib.load(model_path)
+    scripts_dir = Path(__file__).resolve().parents[2] / "scripts"
+    scripts_dir_str = str(scripts_dir)
+    path_was_added = False
+    if scripts_dir.exists() and scripts_dir_str not in sys.path:
+        sys.path.insert(0, scripts_dir_str)
+        path_was_added = True
+    try:
+        obj = joblib.load(model_path)
+    finally:
+        if path_was_added:
+            try:
+                sys.path.remove(scripts_dir_str)
+            except ValueError:
+                pass
     # Support legacy bare-model files (pre-artifact format)
     if not isinstance(obj, TrainedModelArtifact):
+        if obj.__class__.__name__ == "SmartRouter" or hasattr(obj, "CHAMPION_PATHS"):
+            return TrainedModelArtifact(
+                model=obj,
+                metadata=ModelArtifactMetadata(
+                    feature_columns=(
+                        "LotArea",
+                        "OverallQual",
+                        "OverallCond",
+                        "YearBuilt",
+                        "YearRemodAdd",
+                        "GrLivArea",
+                        "FullBath",
+                        "HalfBath",
+                        "BedroomAbvGr",
+                        "TotRmsAbvGrd",
+                        "Fireplaces",
+                        "GarageCars",
+                        "GarageArea",
+                        "NeighborhoodScore",
+                        "PropertyType",
+                        "HouseStyle",
+                        "Neighborhood",
+                    ),
+                    target_column="SalePrice",
+                    model_name="nationwide-smart-router",
+                    model_version="v1",
+                ),
+            )
         return TrainedModelArtifact(
             model=obj,
             metadata=ModelArtifactMetadata(

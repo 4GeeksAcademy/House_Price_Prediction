@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from house_price_prediction.config import Settings
@@ -18,6 +20,8 @@ class ModelInferenceError(RuntimeError):
 
 
 class PredictionRuntime:
+    _CATEGORICAL_FEATURES = {"PropertyType", "HouseStyle", "Neighborhood"}
+
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._artifact: TrainedModelArtifact | None = None
@@ -50,8 +54,20 @@ class PredictionRuntime:
             )
 
         model = self._load_artifact().model
+        normalized_features: dict[str, Any] = {}
+        for name, value in features.items():
+            if value is None:
+                normalized_features[name] = "" if name in self._CATEGORICAL_FEATURES else np.nan
+            else:
+                normalized_features[name] = value
         try:
-            prediction = model.predict(pd.DataFrame([features]))
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="X does not have valid feature names, but LGBMRegressor was fitted with feature names",
+                    category=UserWarning,
+                )
+                prediction = model.predict(pd.DataFrame([normalized_features]))
         except Exception as exc:
             raise ModelInferenceError(f"Prediction failed: {exc}") from exc
         return float(prediction[0])

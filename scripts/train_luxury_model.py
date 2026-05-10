@@ -89,7 +89,7 @@ def build_pipeline():
     ])
 
 
-def train_luxury_model(data_file='data/processed/nationwide_single_family_training_data.jsonl',
+def train_luxury_model(data_file='data/processed/csv_training_data.jsonl',
                        output_file='models/nationwide_luxury_model.joblib'):
     """Train ultra-luxury model."""
 

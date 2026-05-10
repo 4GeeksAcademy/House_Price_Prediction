@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy.orm import sessionmaker
@@ -14,6 +15,9 @@ from house_price_prediction.application.contracts.orchestration_contracts import
 )
 from house_price_prediction.application.services.feature_assembly_service import (
     FeatureAssemblyService,
+)
+from house_price_prediction.application.services.price_calibration import (
+    apply_state_calibration,
 )
 from house_price_prediction.application.services.neighborhood_score_service import (
     NeighborhoodScoreService,
@@ -157,7 +161,10 @@ class DataOrchestrationLayer:
             normalized_address=normalization_result.normalized_address,
         )
 
-        base_payload = provider_response.payload
+        base_payload = self._apply_geocoding_feature_overrides(
+            provider_response.payload,
+            normalization_result.geocoding_provider_response,
+        )
         if feature_overrides:
             base_payload = {**base_payload, **feature_overrides}
         # Inject NeighborhoodScore from the national ZCTA scorer (unless the
@@ -444,11 +451,18 @@ class DataOrchestrationLayer:
                     # The feature snapshot only carries model-aligned features, so
                     # feature_source (a metadata key) is not stored there.
                     reused_feature_source: str | None = None
+                    reused_feature_provenance: dict[str, Any] | None = None
                     for pr in reusable_prediction.provider_responses:
                         fs = pr.feature_source
-                        if fs:
+                        if fs and reused_feature_source is None:
                             reused_feature_source = fs
-                            break
+                        if pr.feature_provenance and reused_feature_provenance is None:
+                            reused_feature_provenance = pr.feature_provenance
+                    reused_actual_features = {
+                        name: value
+                        for name, value in reused_features.items()
+                        if value is not None
+                    }
                     return PredictionWorkflowResult(
                         request_id=command.request_id,
                         prediction_id=prediction_id,
@@ -468,7 +482,9 @@ class DataOrchestrationLayer:
                         selected_feature_policy_name=reusable_prediction.selected_feature_policy_name,
                         selected_feature_policy_version=reusable_prediction.selected_feature_policy_version,
                         key_features=reused_key_features,
+                        actual_house_features=reused_actual_features,
                         feature_source=reused_feature_source,
+                        feature_provenance=reused_feature_provenance,
                     )
 
                 provider_response = self._build_property_record_with_cache(
@@ -494,12 +510,14 @@ class DataOrchestrationLayer:
                     ),
                 )
 
+                enriched_payload = self._apply_geocoding_feature_overrides(
+                    provider_response.payload,
+                    normalization_result.geocoding_provider_response,
+                )
                 # Merge caller-supplied feature overrides into the provider payload.
                 # Overrides are applied last so they take precedence over provider values.
                 if command.payload.feature_overrides:
-                    enriched_payload = {**provider_response.payload, **command.payload.feature_overrides}
-                else:
-                    enriched_payload = provider_response.payload
+                    enriched_payload = {**enriched_payload, **command.payload.feature_overrides}
                 # Inject NeighborhoodScore from the national ZCTA scorer.
                 # This runs after feature_overrides so the caller can still
                 # supply their own NeighborhoodScore and it will be respected.
@@ -535,9 +553,19 @@ class DataOrchestrationLayer:
                         occurred_at=datetime.now(UTC),
                     ),
                 )
-                prediction_value = round(
+                raw_prediction = round(
                     self._prediction_runtime.predict(feature_vector.features),
                     2,
+                )
+                feature_source_for_cal = enriched_payload.get("feature_source")
+                prediction_value, cal_multiplier = apply_state_calibration(
+                    raw_price=raw_prediction,
+                    state=normalization_result.normalized_address.state,
+                    feature_source=feature_source_for_cal,
+                    postal_code=(
+                        command.payload.postal_code
+                        or normalization_result.normalized_address.postal_code
+                    ),
                 )
                 feature_snapshot_id = repository.create_feature_snapshot(feature_vector)
                 prediction_id = repository.create_prediction(
@@ -612,6 +640,13 @@ class DataOrchestrationLayer:
             for k in KEY_BUYER_FEATURES
             if feature_vector.features.get(k) is not None
         }
+        exact_house_features = dict(command.payload.feature_overrides or {})
+        actual_house_features = {
+            name: value
+            for name, value in enriched_payload.items()
+            if value is not None
+            and name not in {"feature_source", "feature_provenance", "provider_cache"}
+        }
         return PredictionWorkflowResult(
             request_id=command.request_id,
             prediction_id=prediction_id,
@@ -631,7 +666,10 @@ class DataOrchestrationLayer:
             selected_feature_policy_name=feature_vector.feature_policy_name,
             selected_feature_policy_version=feature_vector.feature_policy_version,
             key_features=key_features,
-            feature_source=provider_response.payload.get("feature_source") or None,
+            exact_house_features=exact_house_features,
+            actual_house_features=actual_house_features,
+            feature_source=enriched_payload.get("feature_source") or None,
+            feature_provenance=enriched_payload.get("feature_provenance"),
         )
 
     def _normalize(self, payload: AddressPayload) -> NormalizationStageResult:
@@ -732,6 +770,97 @@ class DataOrchestrationLayer:
             payload=event.payload,
             occurred_at=event.occurred_at,
         )
+
+    @staticmethod
+    def _apply_geocoding_feature_overrides(
+        provider_payload: dict[str, Any],
+        geocoding_provider_response: ProviderResponseContract,
+    ) -> dict[str, Any]:
+        geocoding_result = geocoding_provider_response.payload.get("result")
+        if not isinstance(geocoding_result, dict):
+            return provider_payload
+
+        geocoding_type = str(geocoding_result.get("type") or "").strip().lower()
+        addresstype = str(geocoding_result.get("addresstype") or "").strip().lower()
+        name = " ".join(
+            part
+            for part in (
+                str(geocoding_result.get("name") or "").strip().lower(),
+                str(geocoding_result.get("display_name") or "").strip().lower(),
+            )
+            if part
+        )
+        try:
+            importance = float(geocoding_result.get("importance") or 0.0)
+        except (TypeError, ValueError):
+            importance = 0.0
+
+        landmark_indicators = {
+            "government",
+            "office",
+            "commercial",
+            "public",
+            "museum",
+            "university",
+            "school",
+            "historic",
+        }
+        landmark_address_types = {
+            "office",
+            "building",
+            "attraction",
+            "landmark",
+            "public",
+            "university",
+            "school",
+        }
+        landmark_name_markers = (
+            "white house",
+            "capitol",
+            "courthouse",
+            "city hall",
+            "town hall",
+            "state house",
+            "museum",
+            "library",
+            "mansion",
+        )
+        is_landmark_like = (
+            importance >= 0.25
+            and (
+                geocoding_type in landmark_indicators
+                or addresstype in landmark_address_types
+                or any(marker in name for marker in landmark_name_markers)
+            )
+        )
+        if not is_landmark_like:
+            return provider_payload
+
+        adjusted_payload = dict(provider_payload)
+        adjusted_payload["PropertyType"] = "luxury"
+        adjusted_payload["OverallQual"] = max(int(float(adjusted_payload.get("OverallQual") or 0)), 9)
+        adjusted_payload["GrLivArea"] = max(int(float(adjusted_payload.get("GrLivArea") or 0)), 6000)
+        adjusted_payload["LotArea"] = max(int(float(adjusted_payload.get("LotArea") or 0)), 15000)
+        adjusted_payload["FullBath"] = max(int(float(adjusted_payload.get("FullBath") or 0)), 3)
+        adjusted_payload["BedroomAbvGr"] = max(int(float(adjusted_payload.get("BedroomAbvGr") or 0)), 4)
+        adjusted_payload["TotRmsAbvGrd"] = max(int(float(adjusted_payload.get("TotRmsAbvGrd") or 0)), 10)
+        adjusted_payload["GarageCars"] = max(int(float(adjusted_payload.get("GarageCars") or 0)), 3)
+        adjusted_payload["GarageArea"] = max(
+            int(float(adjusted_payload.get("GarageArea") or 0)),
+            int(adjusted_payload["GarageCars"]) * 300,
+        )
+        adjusted_payload["Fireplaces"] = max(int(float(adjusted_payload.get("Fireplaces") or 0)), 2)
+        adjusted_payload["ViewScore"] = max(float(adjusted_payload.get("ViewScore") or 0), 2.0)
+
+        provenance = dict(adjusted_payload.get("feature_provenance") or {})
+        provenance["geocoding_adjustment"] = {
+            "strategy": "landmark_like_geocoder_override",
+            "geocoding_type": geocoding_type,
+            "addresstype": addresstype,
+            "importance": round(importance, 6),
+        }
+        adjusted_payload["feature_provenance"] = provenance
+        return adjusted_payload
 
     def _inject_neighborhood_score(
         self,

@@ -35,11 +35,7 @@ class FakePropertyDataClient:
             "BasementSF": self._number(seed, "BasementSF", 0, 1200),
             "Waterfront": 1 if self._fraction(seed, "Waterfront") > 0.985 else 0,
             "ViewScore": 0 if self._fraction(seed, "ViewScore") > 0.10 else self._number(seed, "ViewScoreVal", 1, 4),
-            "Neighborhood": self._choice(
-                seed,
-                "Neighborhood",
-                ["CollgCr", "NAmes", "OldTown", "Edwards", "Somerst"],
-            ),
+            "Neighborhood": normalized_address.postal_code or "00000",
             "HouseStyle": self._choice(seed, "HouseStyle", ["1Story", "2Story", "SLvl"]),
             # ── new model features ──────────────────────────────────
             "CensusMedianValue": self._number(seed, "CensusMedianValue", 80_000, 800_000),

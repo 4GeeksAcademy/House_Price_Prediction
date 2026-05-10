@@ -1,6 +1,7 @@
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -32,7 +33,6 @@ class Settings:
     raw_data_path: Path
     target_column: str
     model_path: Path
-    model_type: str
     test_size: float
     random_state: int
     app_name: str
@@ -48,6 +48,7 @@ class Settings:
     prediction_reuse_max_age_hours: int
     provider_timeout_seconds: float
     provider_max_retries: int
+    model_type: str = "lightgbm"
     provider_response_cache_max_age_hours: int = 24
     training_min_rows: int = 0
     feature_policy_name: str = "balanced-v1"
@@ -55,10 +56,13 @@ class Settings:
     feature_policy_state_overrides: dict[str, str] = field(
         default_factory=dict)
     walkscore_api_key: str = ""
+    rentcast_api_key: str = ""
+    rentcast_api_base_url: str = "https://api.rentcast.io/v1"
     neighborhood_scorer_path: Path = field(
         default_factory=lambda: Path("models/neighborhood_scorer.joblib"))
 
 
+@lru_cache(maxsize=1)
 def load_settings() -> Settings:
     """Load settings from environment variables with sensible defaults."""
     load_dotenv()
@@ -68,7 +72,7 @@ def load_settings() -> Settings:
             os.getenv("RAW_DATA_PATH", "data/raw/housing.csv")),
         target_column=os.getenv("TARGET_COLUMN", "SalePrice"),
         model_path=Path(
-            os.getenv("MODEL_PATH", "models/nationwide_smart_router.pkl")),
+            os.getenv("MODEL_PATH", "models/nationwide_smart_router.joblib")),
         model_type=os.getenv("MODEL_TYPE", "lightgbm").strip().lower(),
         test_size=float(os.getenv("TEST_SIZE", "0.2")),
         random_state=int(os.getenv("RANDOM_STATE", "42")),
@@ -79,8 +83,8 @@ def load_settings() -> Settings:
         database_url=os.getenv(
             "DATABASE_URL", "sqlite:///data/processed/house_price_prediction.db"
         ),
-        model_name=os.getenv("MODEL_NAME", "house-price-random-forest"),
-        model_version=os.getenv("MODEL_VERSION", "0.1.0"),
+        model_name=os.getenv("MODEL_NAME", "nationwide-smart-router"),
+        model_version=os.getenv("MODEL_VERSION", "2.0.0"),
         enable_mock_predictor=_get_bool_env("ENABLE_MOCK_PREDICTOR", False),
         property_data_provider=os.getenv(
             "PROPERTY_DATA_PROVIDER", "free-fallback"),
@@ -100,6 +104,8 @@ def load_settings() -> Settings:
             os.getenv("FEATURE_POLICY_STATE_OVERRIDES", "")
         ),
         walkscore_api_key=os.getenv("WALKSCORE_API_KEY", ""),
+        rentcast_api_key=os.getenv("RENTCAST_API_KEY", ""),
+        rentcast_api_base_url=os.getenv("RENTCAST_API_BASE_URL", "https://api.rentcast.io/v1"),
         neighborhood_scorer_path=Path(
             os.getenv("NEIGHBORHOOD_SCORER_PATH",
                       "models/neighborhood_scorer.joblib")

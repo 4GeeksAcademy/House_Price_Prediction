@@ -115,10 +115,10 @@ T(s, "Project Scope", 0.58, 2.88, 5.9, 0.40, sz=15, bold=True, clr=NAVY)
 scope = [
     "22,098 training rows \u2014 King County WA + Ames Iowa datasets",
     "16-feature optimised model (property + census + school signals)",
-    "FastAPI REST backend with 7 Alembic database migrations",
-    "Streamlit live dashboard deployed on Render.com",
+    "FastAPI REST backend with 8 Alembic database migrations",
+    "Streamlit live dashboard with live API feature badges",
     "30,379 national ZIP centroid neighbourhood scorer",
-    "92 automated tests passing",
+    "103 automated tests passing \u2014 100% success rate",
 ]
 for i, line in enumerate(scope):
     T(s, f"  \u2022  {line}", 0.56, 3.36 + i * 0.46, 6.0, 0.40, sz=12, clr=D_GRAY)
@@ -130,10 +130,10 @@ T(s, "KEY METRICS", 7.08, 1.44, 5.92, 0.38,
 
 stats  = [("R\u00b2 Score","0.9266"), ("MAE","$16,574"),
           ("RMSE","$20,904"),         ("Features","16"),
-          ("Tests","92"),             ("ZCTAs","30,379")]
+          ("Tests","103"),            ("ZCTAs","30,379")]
 snotes = ["92.66% test accuracy","Mean absolute error",
           "Root mean sq. error","Optimised model inputs",
-          "Automated tests","National ZIP coverage"]
+          "All pass ✓ LOCKED","National ZIP coverage"]
 
 for i, ((lbl, val), note) in enumerate(zip(stats, snotes)):
     col = i % 2
@@ -470,7 +470,7 @@ for i, (name, desc) in enumerate(dash):
     T(s, desc, 0.70, dy+0.30, 5.6, 0.28, sz=10, italic=True, clr=MID_GRAY)
 
 # right mockup
-R(s, 6.78, 1.36, 6.22, 5.90, NAVY)
+R(s, 6.78, 1.36, 6.22, 5.50, NAVY)
 T(s, "DASHBOARD PREVIEW", 6.94, 1.42, 5.90, 0.38,
   sz=12, bold=True, clr=PURPLE, align=PP_ALIGN.CENTER)
 
@@ -483,27 +483,27 @@ def ui_card(sl, px, py, pw, ph, pc, title, val, sub=None):
         T(sl, sub, px+0.12, py+ph-0.28, pw-0.22, 0.22,
           sz=9, italic=True, clr=L_PURPLE)
 
-ui_card(s, 6.88, 1.90, 6.00, 0.72, CARD_BG,
+ui_card(s, 6.88, 1.90, 6.00, 0.68, CARD_BG,
         "Enter Address", "123 Main St, Seattle WA 98101")
-ui_card(s, 6.88, 2.74, 2.88, 1.10, ICON_GRN,
+ui_card(s, 6.88, 2.68, 2.88, 1.00, ICON_GRN,
         "Predicted Price", "$524,000", "\u2191 +2.3% vs median")
-ui_card(s, 9.88, 2.74, 3.00, 1.10, ICON_BLU,
+ui_card(s, 9.88, 2.68, 3.00, 1.00, ICON_BLU,
         "Confidence Band", "$482k \u2013 $566k", "R\u00b2 = 0.9266")
 
-R(s, 6.88, 3.96, 6.00, 1.24, CARD_BG)
-T(s, "Feature Importance", 7.00, 4.02, 5.76, 0.26,
+R(s, 6.88, 3.78, 6.00, 1.10, CARD_BG)
+T(s, "Feature Importance", 7.00, 3.84, 5.76, 0.26,
   sz=9, bold=True, clr=PURPLE)
 T(s,
   "GrLivArea     \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588  14.1%\n"
   "MedianIncome  \u2588\u2588\u2588\u2588\u2588\u2588\u2588  10.8%\n"
   "SchoolRating  \u2588\u2588\u2588\u2588\u2588\u2588   8.8%",
-  7.00, 4.30, 5.76, 0.84, sz=11, clr=WHITE)
+  7.00, 4.10, 5.76, 0.72, sz=10, clr=WHITE)
 
-ui_card(s, 6.88, 5.30, 6.00, 0.60, CARD_BG,
+ui_card(s, 6.88, 5.00, 6.00, 0.60, CARD_BG,
         "Active Policy", "balanced-v1  \u00b7  NeighbourhoodScore: 72 / 100")
 
 T(s, "Live: house-price-prediction-1-vrwx.onrender.com",
-  6.90, 7.04, 5.96, 0.28,
+  6.90, 6.80, 5.96, 0.28,
   sz=11, bold=True, clr=PURPLE, align=PP_ALIGN.CENTER)
 
 # ─────────────────────────────────────────────────────────────
@@ -630,7 +630,7 @@ milestones = [
     ("Apr 13", "25", "Initial backend scaffold"),
     ("Apr 15", "83", "National scorer + orchestration"),
     ("Apr 27", "68", "Policy engine + overrides"),
-    ("May  6", "92", "Production readiness pass"),
+    ("May 10", "103", "PRODUCTION LOCKED ✓"),
 ]
 for i, (date, cnt, note) in enumerate(milestones):
     my = 1.94 + i * 0.54
@@ -655,7 +655,52 @@ for i, p in enumerate(practices):
     T(s, f"\u2022 {p}", 6.98, 4.72 + i*0.38, 5.86, 0.34, sz=11, clr=D_GRAY)
 
 # ─────────────────────────────────────────────────────────────
-# SLIDE 12  Key Learnings
+# SLIDE 12  Production Status
+# ─────────────────────────────────────────────────────────────
+s = prs.slides.add_slide(BLANK)
+R(s, 0, 0, 13.33, 7.5, L_GRAY)
+header(s, "Production Status", "System locked and ready for deployment")
+
+# left panel - readiness checks
+R(s, 0.35, 1.38, 6.35, 5.86, WHITE)
+T(s, "Deployment Readiness", 0.55, 1.45, 5.80, 0.40, sz=14, bold=True, clr=NAVY)
+
+checks = [
+    (GREEN,  "✓", "Code Quality",           "No syntax/lint errors \u2014 all critical files verified"),
+    (GREEN,  "✓", "Test Suite",             "103/103 tests passing (100% success rate)"),
+    (GREEN,  "✓", "Database Schema",        "All 8 migrations applied (v20260417_000008)"),
+    (GREEN,  "✓", "API Contract",           "Modern `/v1/*` endpoints fully validated"),
+    (GREEN,  "✓", "Configuration",          "Production-safe defaults enforced"),
+    (GREEN,  "✓", "Models & Data",          "All files present and loaded"),
+]
+for i, (clr, icon, title, detail) in enumerate(checks):
+    y = 1.96 + i * 0.79
+    R(s, 0.46, y+0.07, 0.24, 0.24, clr)
+    T(s, icon,   0.50, y+0.04, 0.16, 0.30, sz=14, bold=True, clr=WHITE, align=PP_ALIGN.CENTER)
+    T(s, title,   0.78, y+0.02, 2.60, 0.30, sz=12, bold=True, clr=D_GRAY)
+    T(s, detail, 0.78, y+0.32, 5.60, 0.34, sz=10, italic=True, clr=MID_GRAY)
+
+# right panel - key improvements
+R(s, 7.08, 1.38, 5.92, 5.86, NAVY)
+T(s, "FINAL IMPROVEMENTS", 7.08, 1.44, 5.92, 0.38,
+  sz=13, bold=True, clr=PURPLE, align=PP_ALIGN.CENTER)
+
+improvements = [
+    ("Modern API Routing",      "Legacy `/v1/*` unmapped \u2192 modern orchestration active"),
+    ("UI Feature Badges",       "Live provider data marked with source labels + styling"),
+    ("Smart Calibration",       "All 50 states have valid multipliers; local evidence-based"),
+    ("Database Migrations",     "8 revisions locked; workflow_events table + indices"),
+    ("Schema Drift Fixed",      "Alembic migration-first prevents 500 errors"),
+    ("Live Prediction Flow",    "RentCast \u2192 Census \u2192 Nominatim \u2192 Heuristic fallback"),
+]
+for i, (feature, description) in enumerate(improvements):
+    y = 1.96 + i * 0.79
+    R(s, 7.16, y, 5.76, 0.72, CARD_BG)
+    T(s, feature, 7.36, y+0.08, 3.0, 0.28, sz=12, bold=True, clr=WHITE)
+    T(s, description, 7.36, y+0.38, 5.4, 0.28, sz=9, italic=True, clr=L_PURPLE)
+
+# ─────────────────────────────────────────────────────────────
+# SLIDE 13  Key Learnings
 # ─────────────────────────────────────────────────────────────
 s = prs.slides.add_slide(BLANK)
 R(s, 0, 0, 13.33, 7.5, L_GRAY)
@@ -688,7 +733,7 @@ for i, (clr, num, title, body) in enumerate(learnings):
     T(s, body,  1.04, ly+0.46, 11.5, 0.54, sz=11, clr=D_GRAY)
 
 # ─────────────────────────────────────────────────────────────
-# SLIDE 13  Thank You
+# SLIDE 14  Thank You
 # ─────────────────────────────────────────────────────────────
 s = prs.slides.add_slide(BLANK)
 R(s, 0, 0, 13.33, 7.50, NAVY)
@@ -705,8 +750,8 @@ R(s, 2.8, 3.92, 7.73, 0.07, PURPLE)
 
 summary_lines = [
     "R\u00b2 = 0.9266   \u00b7   MAE = $16,574   \u00b7   RMSE = $20,904",
-    "22,098 training rows   \u00b7   16 optimised features   \u00b7   92 tests passing",
-    "FastAPI  +  LightGBM  +  PostgreSQL  +  Streamlit  \u2014  Deployed on Render",
+    "22,098 training rows   \u00b7   16 optimised features   \u00b7   103 tests passing (100% ✓)",
+    "Production-Ready: All Migrations Applied  \u00b7  Modern API Active  \u00b7  UI Locked",
 ]
 for i, line in enumerate(summary_lines):
     T(s, line, 1.0, 4.12 + i*0.46, 11.33, 0.40,

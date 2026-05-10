@@ -54,14 +54,13 @@ export-openapi:
 	python scripts/export_openapi.py
 
 ci-verify:
-	python scripts/bootstrap_training_data.py
-	python scripts/train.py --min-rows=2
-	pytest
+	PYTHONPATH=src RAW_DATA_PATH=data/processed/csv_training_data.jsonl python scripts/train.py --min-rows=2
+	PYTHONPATH=src pytest
 	rm -f data/processed/smoke_validation.db
-	DATABASE_URL=sqlite:///data/processed/smoke_validation.db PREDICTION_REUSE_MAX_AGE_HOURS=0 python scripts/smoke_api.py
+	PYTHONPATH=src DATABASE_URL=sqlite:///data/processed/smoke_validation.db PREDICTION_REUSE_MAX_AGE_HOURS=0 python scripts/smoke_api.py
 	rm -f data/processed/real_validation.db
-	ENABLE_MOCK_PREDICTOR=false GEOCODING_PROVIDER=free-fallback PROPERTY_DATA_PROVIDER=free-fallback PREDICTION_REUSE_MAX_AGE_HOURS=0 DATABASE_URL=sqlite:///data/processed/real_validation.db python scripts/smoke_api.py
-	python scripts/export_openapi.py
+	PYTHONPATH=src ENABLE_MOCK_PREDICTOR=false GEOCODING_PROVIDER=free-fallback PROPERTY_DATA_PROVIDER=free-fallback PREDICTION_REUSE_MAX_AGE_HOURS=0 DATABASE_URL=sqlite:///data/processed/real_validation.db python scripts/smoke_api.py
+	PYTHONPATH=src python scripts/export_openapi.py
 
 lint:
 	python -m py_compile src/house_price_prediction/*.py scripts/*.py

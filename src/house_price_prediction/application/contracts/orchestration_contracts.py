@@ -44,7 +44,10 @@ class PredictionWorkflowResult(BaseModel):
     selected_feature_policy_name: str | None = None
     selected_feature_policy_version: str | None = None
     key_features: dict[str, Any] = Field(default_factory=dict)
+    exact_house_features: dict[str, Any] = Field(default_factory=dict)
+    actual_house_features: dict[str, Any] = Field(default_factory=dict)
     feature_source: str | None = None
+    feature_provenance: dict[str, Any] | None = None
 
 
 class NormalizationStageResult(BaseModel):

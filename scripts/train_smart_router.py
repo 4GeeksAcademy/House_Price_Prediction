@@ -35,10 +35,12 @@ warnings.filterwarnings("ignore")
 
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from model_utils import LogTargetPipeline, LocationAwarePipeline, SmartRouter  # noqa: F401
+from house_price_prediction.model import save_model_artifact
 
 ROOT = Path(__file__).parent.parent
-DATA = ROOT / "data/processed/nationwide_single_family_training_data.jsonl"
+DATA = ROOT / "data/processed/csv_training_data.jsonl"
 MODELS = ROOT / "models"
 
 NUMERIC_COLS = [
@@ -47,6 +49,8 @@ NUMERIC_COLS = [
     "Fireplaces", "GarageCars", "GarageArea", "NeighborhoodScore",
 ]
 STR_COLS = ["PropertyType", "HouseStyle", "Neighborhood"]
+FEATURE_COLUMNS = NUMERIC_COLS + STR_COLS
+TARGET_COLUMN = "SalePrice"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -231,7 +235,14 @@ def main():
 
     # ── Save ─────────────────────────────────────────────────────────
     out = MODELS / "nationwide_smart_router.joblib"
-    joblib.dump(router, out, compress=3)
+    save_model_artifact(
+        model=router,
+        model_path=out,
+        feature_columns=FEATURE_COLUMNS,
+        target_column=TARGET_COLUMN,
+        model_name="nationwide-smart-router",
+        model_version="v1",
+    )
     print(f"\n{bar}")
     print(f"  Saved -> {out}")
     print(bar)

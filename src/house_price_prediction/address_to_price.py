@@ -27,121 +27,53 @@ class AssessorAPIConnector:
 
     @staticmethod
     def search_property_by_address(address: str) -> Dict:
-        """Derive pkl-compatible property features directly from the address.
-
-        Pipeline:
-          1. Build heuristic/census feature baseline from address.
-          2. If RENTCAST_API_KEY is set, attempt a Rentcast lookup and overlay
-             real property data (beds, baths, sqft, yr_built, lot_size) on top.
-        """
-        import os
+        """Derive pkl-compatible property features directly from the address using RentCast API."""
         print(f"[PROPERTY-LOOKUP] Building features from address: {address}")
+        
+        # First try RentCast for real property data
+        try:
+            from .infrastructure.providers.factory import create_property_data_provider
+            from .config import load_settings
+            from .domain.contracts.prediction_contracts import NormalizedAddress
+            
+            settings = load_settings()
+            provider = create_property_data_provider(settings)
+            
+            # Parse address for RentCast
+            import re
+            parts = [p.strip() for p in address.split(',')]
+            zip_match = re.search(r'\b(\d{5})\b', address)
+            real_zipcode = zip_match.group(1) if zip_match else '00000'
+            
+            state_match = re.search(r'\b([A-Z]{2})\s+\d{5}\b', address)
+            real_state = state_match.group(1) if state_match else 'XX'
+            
+            normalized = NormalizedAddress(
+                address_line_1=parts[0] if parts else address,
+                city=parts[1] if len(parts) > 1 else 'Unknown',
+                state=real_state,
+                postal_code=real_zipcode,
+                country="US",
+                formatted_address=address
+            )
+            
+            print(f"[RENTCAST] Attempting to fetch real property data...")
+            response = provider.fetch_property_features(normalized)
+            if response and response.payload:
+                features = AssessorAPIConnector._features_from_address(address, rentcast_data=response.payload)
+                print(f"[OK] Features built from RentCast for: {address}")
+                return features
+        except Exception as e:
+            print(f"[RENTCAST] Failed ({e}), falling back to Census+Heuristic...")
+        
+        # Fallback: use Census + heuristic defaults
         features = AssessorAPIConnector._features_from_address(address)
-
-        # ── Rentcast real-data overlay ────────────────────────────────────
-        rentcast_key = os.getenv("RENTCAST_API_KEY", "").strip()
-        if rentcast_key:
-            try:
-                real = AssessorAPIConnector._fetch_rentcast(address, rentcast_key)
-                if real:
-                    features.update(real)
-                    # Recompute derived fields after overlay
-                    beds   = int(features.get("BedroomAbvGr", 3))
-                    fbath  = int(features.get("FullBath", 1))
-                    gc     = int(features.get("GarageCars", 1))
-                    yr     = int(features.get("YearBuilt", 1990))
-                    sqft   = float(features.get("GrLivArea", 1500))
-                    cmed   = float(features.get("CensusMedianValue", 350000))
-                    features["TotRmsAbvGrd"] = beds + fbath + 2
-                    features["YearRemodAdd"] = yr + 10
-                    features["GarageArea"]   = gc * 240
-                    if sqft > 0:
-                        features["PricePerSqft"] = round(cmed / sqft, 1)
-                    print(f"[RENTCAST] Real data applied: beds={beds}, baths={fbath}, sqft={sqft}, yr={yr}")
-            except Exception as exc:
-                print(f"[RENTCAST] Lookup failed, using heuristic: {exc}")
-        # ─────────────────────────────────────────────────────────────────
-
-        print(f"[OK] Features built for: {address}")
+        print(f"[OK] Features built (Census+Heuristic) for: {address}")
         return features
 
     @staticmethod
-    def _fetch_rentcast(address: str, api_key: str) -> Dict:
-        """Call Rentcast /properties API and return feature-mapped dict."""
-        import re
-        import urllib.request
-        import json as _json
-        import urllib.parse
-
-        # Parse address components
-        zip_match   = re.search(r'\b(\d{5})\b', address)
-        state_match = re.search(r'\b([A-Z]{2})\s+\d{5}\b', address)
-        parts       = [p.strip() for p in address.split(',')]
-        street      = parts[0] if parts else address
-        city_raw    = parts[-2].strip() if len(parts) >= 3 else ""
-        city        = re.sub(r'\b[A-Z]{2}\b', '', city_raw).strip()
-        state       = state_match.group(1) if state_match else ""
-        zipcode     = zip_match.group(1) if zip_match else ""
-
-        params = urllib.parse.urlencode({
-            "address": street,
-            "city": city,
-            "state": state,
-            "zipCode": zipcode,
-        })
-        url = f"https://api.rentcast.io/v1/properties?{params}"
-        req = urllib.request.Request(
-            url,
-            headers={"X-Api-Key": api_key, "Accept": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = _json.loads(resp.read())
-
-        if isinstance(data, list):
-            if not data:
-                return {}
-            data = data[0]
-
-        result: Dict = {}
-        beds  = data.get("bedrooms")
-        baths = data.get("bathrooms")
-        sqft  = data.get("squareFootage")
-        lot   = data.get("lotSize")
-        yr    = data.get("yearBuilt")
-        gc    = data.get("garageSpaces") or data.get("garage")
-
-        if beds  is not None: result["BedroomAbvGr"] = int(beds)
-        if baths is not None:
-            result["FullBath"] = int(baths)
-            result["HalfBath"] = 1 if (float(baths) % 1) >= 0.5 else 0
-        if sqft  is not None: result["GrLivArea"]    = float(sqft)
-        if lot   is not None: result["LotArea"]       = float(lot)
-        if yr    is not None: result["YearBuilt"]     = int(yr)
-        if gc    is not None: result["GarageCars"]    = int(gc)
-        return result
-
-    @staticmethod
     def _geocode_address_simple(address: str):
-        """Return (lat, lon) for address via Census Geocoder (primary) or Nominatim (fallback)."""
-        try:
-            import urllib.request
-            import json as _json
-            import urllib.parse
-            encoded = urllib.parse.quote(address)
-            url = (
-                f"https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
-                f"?address={encoded}&benchmark=2020&format=json"
-            )
-            req = urllib.request.Request(url, headers={"User-Agent": "HousePricePrediction/1.0"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = _json.loads(resp.read())
-            matches = data.get("result", {}).get("addressMatches", [])
-            if matches:
-                coords = matches[0]["coordinates"]
-                return float(coords["y"]), float(coords["x"])
-        except Exception as e:
-            print(f"[GEOCODE-CENSUS] Failed: {e}")
-        # Fallback: Nominatim
+        """Return (lat, lon) for address via Nominatim, or (0.0, 0.0) on failure."""
         try:
             import urllib.request
             import json as _json
@@ -154,144 +86,49 @@ class AssessorAPIConnector:
             if results:
                 return float(results[0]["lat"]), float(results[0]["lon"])
         except Exception as e:
-            print(f"[GEOCODE-NOMINATIM] Failed: {e}")
+            print(f"[GEOCODE-SIMPLE] Failed: {e}")
         return 0.0, 0.0
-
-    @staticmethod
-    def _fcc_census_tract(lat: float, lon: float) -> tuple:
-        """Return (state_fips, county_fips, tract_fips) from FCC Block API.
-        Free federal API, no key required. Raises on failure."""
-        import urllib.request
-        import json as _json
-        url = f"https://geo.fcc.gov/api/census/block/find?latitude={lat}&longitude={lon}&format=json"
-        req = urllib.request.Request(url, headers={"User-Agent": "HousePricePrediction/1.0"})
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            d = _json.loads(resp.read())
-        if d.get("status") != "OK":
-            raise ValueError(f"FCC API status: {d.get('status')}")
-        block_fips = d["Block"]["FIPS"]  # 15-digit FIPS: 2(state)+3(county)+6(tract)+4(block)
-        state_fips  = block_fips[0:2]
-        county_fips = block_fips[2:5]
-        tract_fips  = block_fips[5:11]
-        print(f"[FCC] lat={lat:.4f},lon={lon:.4f} → state={state_fips} county={county_fips} tract={tract_fips}")
-        return state_fips, county_fips, tract_fips
-
-    @staticmethod
-    def _census_acs_by_tract(state_fips: str, county_fips: str, tract_fips: str) -> dict:
-        """Fetch ACS 5-year estimates at census-tract level (more precise than ZIP).
-        Returns dict with median_yr_built, median_rooms, modal_beds, median_home_value, median_income."""
-        import urllib.request
-        import json as _json
-        # B25035=median yr built, B25018=median rooms, B25041_002-005=bedroom counts
-        # B25077=median home value, B19013=median income, B25064=median gross rent
-        url = (
-            f"https://api.census.gov/data/2023/acs/acs5"
-            f"?get=B25035_001E,B25018_001E,B25041_003E,B25041_004E,B25041_005E,B25041_006E,B25077_001E,B19013_001E"
-            f"&for=tract:{tract_fips}&in=state:{state_fips}+county:{county_fips}"
-        )
-        req = urllib.request.Request(url, headers={"User-Agent": "HousePricePrediction/1.0"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            rows = _json.loads(resp.read())
-        if len(rows) < 2:
-            return {}
-        header, data = rows[0], rows[1]
-
-        def _get(field):
-            try:
-                v = data[header.index(field)]
-                fv = float(v)               # handles '4.4', '1983', etc.
-                iv = round(fv)
-                return iv if iv not in (-666666666, -999999999) else None
-            except (ValueError, IndexError, TypeError):
-                return None
-
-        # _003E=1BR, _004E=2BR, _005E=3BR, _006E=4BR (per Census B25041 codebook)
-        cnt_1br = _get("B25041_003E") or 0
-        cnt_2br = _get("B25041_004E") or 0
-        cnt_3br = _get("B25041_005E") or 0
-        cnt_4br = _get("B25041_006E") or 0
-        modal_beds = max(
-            [(cnt_1br, 1), (cnt_2br, 2), (cnt_3br, 3), (cnt_4br, 4)],
-            key=lambda x: x[0]
-        )[1]
-
-        result = {
-            "median_yr_built":   _get("B25035_001E"),
-            "median_rooms":      _get("B25018_001E"),
-            "modal_beds":        modal_beds,
-            "median_home_value": _get("B25077_001E"),
-            "median_income":     _get("B19013_001E"),
-        }
-        print(f"[ACS-TRACT] {state_fips}/{county_fips}/{tract_fips} → "
-              f"yr_built={result['median_yr_built']}, rooms={result['median_rooms']}, "
-              f"modal_beds={result['modal_beds']}, home_value=${result['median_home_value']}, "
-              f"income=${result['median_income']}")
-        return result
 
     @staticmethod
     def _census_acs_by_zip(zipcode: str) -> dict:
         """Fetch ACS 5-year estimates for a ZIP code tabulation area from the Census Bureau API.
-        Returns dict with housing stats. Falls back to None values on any error."""
+        Returns dict with 'median_home_value' (B25077_001E) and 'median_income' (B19013_001E).
+        Falls back to None values on any error."""
         try:
             import urllib.request
             import json as _json
-            # B25077_001E = median home value
-            # B19013_001E = median household income
-            # B25035_001E = median year structure built
-            # B25018_001E = median number of rooms
-            # B25041_003E=1BR, _004E=2BR, _005E=3BR, _006E=4BR (per Census B25041 codebook)
+            # Census ACS 5-year — no API key required for simple queries
             url = (
                 f"https://api.census.gov/data/2023/acs/acs5"
-                f"?get=B25077_001E,B19013_001E,B25035_001E,B25018_001E,B25041_003E,B25041_004E,B25041_005E,B25041_006E"
+                f"?get=B25077_001E,B19013_001E"
                 f"&for=zip%20code%20tabulation%20area:{zipcode}"
             )
             req = urllib.request.Request(url, headers={"User-Agent": "HousePricePrediction/1.0"})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 rows = _json.loads(resp.read())
+            # rows[0] = header, rows[1] = data
             if len(rows) >= 2:
                 header, data = rows[0], rows[1]
-                def _get(field):
-                    try:
-                        v = data[header.index(field)]
-                        return int(v) if v not in (None, "-666666666", "-999999999") else None
-                    except (ValueError, IndexError):
-                        return None
-                median_home_value = _get("B25077_001E")
-                median_income     = _get("B19013_001E")
-                median_yr_built   = _get("B25035_001E")
-                median_rooms      = _get("B25018_001E")   # integer rooms
-                # _003E=1BR, _004E=2BR, _005E=3BR, _006E=4BR (per Census B25041 codebook)
-                cnt_1br = _get("B25041_003E") or 0
-                cnt_2br = _get("B25041_004E") or 0
-                cnt_3br = _get("B25041_005E") or 0
-                cnt_4br = _get("B25041_006E") or 0
-                modal_beds = max(
-                    [(cnt_1br, 1), (cnt_2br, 2), (cnt_3br, 3), (cnt_4br, 4)],
-                    key=lambda x: x[0]
-                )[1]
-                print(f"[CENSUS-ACS] zip={zipcode}  value=${median_home_value}  income=${median_income}  yr_built={median_yr_built}  rooms={median_rooms}  modal_beds={modal_beds}")
-                return {
-                    "median_home_value": median_home_value,
-                    "median_income": median_income,
-                    "median_yr_built": median_yr_built,
-                    "median_rooms": median_rooms,
-                    "modal_beds": modal_beds,
-                }
+                idx_val = header.index("B25077_001E")
+                idx_inc = header.index("B19013_001E")
+                median_home_value = int(data[idx_val]) if data[idx_val] not in (None, "-666666666") else None
+                median_income     = int(data[idx_inc]) if data[idx_inc] not in (None, "-666666666") else None
+                print(f"[CENSUS-ACS] zip={zipcode}  median_home_value=${median_home_value:,}  median_income=${median_income:,}")
+                return {"median_home_value": median_home_value, "median_income": median_income}
         except Exception as e:
             print(f"[CENSUS-ACS] Failed for zip {zipcode}: {e}")
-        return {"median_home_value": None, "median_income": None, "median_yr_built": None, "median_rooms": None, "modal_beds": None}
+        return {"median_home_value": None, "median_income": None}
 
     @staticmethod
-    def _features_from_address(address: str) -> Dict:
+    def _features_from_address(address: str, rentcast_data: Dict = None) -> Dict:
         """Build house_price_model.pkl feature dict from address parsing, geocoding,
         and real Census ACS data — no CSV files are read."""
         import re
 
         # --- Parse city / state / zip ---
         parts = [p.strip() for p in address.split(',')]
-        # Match the 5-digit ZIP that follows a 2-letter state abbreviation (avoids grabbing street numbers)
-        zip_match = re.search(r'\b([A-Z]{2})\s+(\d{5})\b', address)
-        real_zipcode = zip_match.group(2) if zip_match else '00000'
+        zip_match = re.search(r'\b(\d{5})\b', address)
+        real_zipcode = zip_match.group(1) if zip_match else '00000'
 
         state_match = re.search(r'\b([A-Z]{2})\s+\d{5}\b', address)
         real_state = state_match.group(1) if state_match else 'XX'
@@ -304,24 +141,10 @@ class AssessorAPIConnector:
         lat, lon = AssessorAPIConnector._geocode_address_simple(address)
         print(f"[FEATURES] city={real_city}, state={real_state}, zip={real_zipcode}, lat={lat:.4f}, lon={lon:.4f}")
 
-        # --- Census ACS at census-tract level (primary — more precise than ZIP) ---
-        tract_acs = {}
-        if lat != 0.0 or lon != 0.0:
-            try:
-                st, co, tr = AssessorAPIConnector._fcc_census_tract(lat, lon)
-                tract_acs = AssessorAPIConnector._census_acs_by_tract(st, co, tr)
-            except Exception as e:
-                print(f"[FEATURES] Tract lookup failed, falling back to ZIP: {e}")
-
-        # --- Census ACS at ZIP level (fallback) ---
-        zip_acs = {}
-        if not tract_acs:
-            zip_acs = AssessorAPIConnector._census_acs_by_zip(real_zipcode)
-
-        acs = tract_acs or zip_acs
-
-        census_median = acs.get("median_home_value")
-        raw_income    = acs.get("median_income")
+        # --- Real Census ACS median home value and income by zip ---
+        acs = AssessorAPIConnector._census_acs_by_zip(real_zipcode)
+        census_median   = acs["median_home_value"]
+        raw_income      = acs["median_income"]
 
         # Fallback: state-level median home values (2024 NAR estimates) if ACS unavailable
         STATE_MEDIAN: dict[str, int] = {
@@ -362,58 +185,33 @@ class AssessorAPIConnector:
         ns_raw = (census_median - 150000) / (1500000 - 150000) * 100
         neighborhood_score = max(10, min(99, round(ns_raw)))
 
-        census_yr_built = acs.get("median_yr_built")    # tract or ZIP median year built
-        census_beds     = acs.get("modal_beds")          # most common bedroom count in tract/ZIP
-        census_rooms    = acs.get("median_rooms")        # median total rooms in tract/ZIP
-
-        # --- Address-specific property estimates (hash-derived so different addresses
-        #     produce different values, while still being deterministic per address) ---
-        import hashlib as _hl
-
-        def _frac(salt: str) -> float:
-            """0..1 float deterministically derived from address + salt."""
-            h = _hl.md5(f"{address}|{real_zipcode}|{lat:.4f}|{lon:.4f}|{salt}".encode()).hexdigest()
-            return int(h[:8], 16) / 0xFFFFFFFF
-
-        urban_score   = _frac("urban_score")
-        quality_frac  = _frac("quality_score")
-        build_frac    = _frac("build_epoch")
-
-        # Year built: prefer Census ZIP-level median, jitter ±5 yrs by address hash
-        if census_yr_built:
-            jitter = round((_frac("yr_jitter") - 0.5) * 10)  # ±5 years
-            yr_built = max(1900, min(2024, census_yr_built + jitter))
+        # --- Reasonable defaults for unknown property details ---
+        yr_built       = 1990
+        gr_liv_area    = 1910.0
+        lot_area       = 7590.0
+        # Use RentCast data if available, otherwise use heuristic defaults
+        if rentcast_data:
+            bedrooms       = int(rentcast_data.get('BedroomAbvGr', 3)) or 3
+            full_bath      = int(rentcast_data.get('FullBath', 2)) or 2
+            half_bath      = int(rentcast_data.get('HalfBath', 0)) or 0
+            gr_liv_area    = float(rentcast_data.get('GrLivArea', 1910.0)) or 1910.0
+            lot_area       = float(rentcast_data.get('LotArea', 7590.0)) or 7590.0
+            yr_built       = int(rentcast_data.get('YearBuilt', 1990)) or 1990
+            overall_qual   = int(rentcast_data.get('OverallQual', 7)) or 7
+            overall_cond   = int(rentcast_data.get('OverallCond', 5)) or 5
+            print(f"[FEATURES] Using RentCast data: {bedrooms}bed, {full_bath}bath, {gr_liv_area}sqft, built {yr_built}")
         else:
-            yr_built = 1965 + round(build_frac * 57)          # 1965–2022 fallback
-
-        gr_liv_area    = float(1100 + round(_frac("gr_liv") * 2400))  # 1100–3500 sqft
-        lot_area       = float(4000 + round((1 - urban_score) * 16000))  # 4000–20000 sqft
-
-        # Bedrooms: prefer Census modal bedroom count for ZIP, jitter ±1
-        if census_beds:
-            bed_jitter = round((_frac("bed_jitter") - 0.5) * 2)   # –1, 0, or +1
-            bedrooms   = max(1, min(6, census_beds + bed_jitter))
-        else:
-            bedrooms   = max(2, 2 + round(_frac("beds") * 3))     # 2–5 fallback
-
-        full_bath      = 1 + round(_frac("full_bath") * 2)      # 1–3
-        half_bath      = round(_frac("half_bath"))               # 0–1
-        overall_qual   = 4 + round(quality_frac * 5)            # 4–9
-        overall_cond   = 4 + round(_frac("condition") * 4)      # 4–8
-        garage_cars    = 1 + round((1 - urban_score) * 2)       # 1–3
-        fireplaces     = round(_frac("fireplaces") * 2)         # 0–2
-
-        # Total rooms: use Census median rooms if available, else derive from bedrooms
-        if census_rooms and census_rooms > 0:
-            tot_rooms = max(bedrooms + 2, int(round(census_rooms)))
-        else:
-            tot_rooms = bedrooms + full_bath + 2
+            bedrooms       = 3
+            full_bath      = 2
+            half_bath      = 0
+            overall_qual   = 7
+            overall_cond   = 5
+        tot_rooms      = bedrooms + full_bath + 2
         price_per_sqft = round(census_median / gr_liv_area, 1)
         land_value     = round(census_median * 0.25)
 
         print(f"[FEATURES] score={neighborhood_score}, income={median_income_k}k, "
-              f"census_median=${census_median:,}, yr_built={yr_built}, beds={bedrooms}, "
-              f"tot_rooms={tot_rooms}, price_per_sqft=${price_per_sqft}")
+              f"census_median=${census_median:,}, price_per_sqft=${price_per_sqft}")
 
         return {
             # ── SmartRouter core features (17 columns) ──────────────────
@@ -427,9 +225,9 @@ class AssessorAPIConnector:
             'HalfBath':          half_bath,
             'BedroomAbvGr':      bedrooms,
             'TotRmsAbvGrd':      tot_rooms,
-            'Fireplaces':        fireplaces,
-            'GarageCars':        garage_cars,
-            'GarageArea':        garage_cars * 240,
+            'Fireplaces':        1,
+            'GarageCars':        2,
+            'GarageArea':        round(gr_liv_area * 0.22),
             'NeighborhoodScore': neighborhood_score,
             'PropertyType':      'single_family',
             'HouseStyle':        '1Story',
@@ -446,11 +244,9 @@ class AssessorAPIConnector:
             'HOAFee':            0.0,
             'PricePerSqft':      price_per_sqft,
             'LandValue':         land_value,
-            'lat':               lat,
-            'lon':               lon,
             'price':             census_median,
             'address':           address,
-            'source':            'address-derived + Census ACS (tract-level yr_built/beds/rooms via FCC Block API)',
+            'source':            'rentcast_property_data + Census ACS (SmartRouter)',
         }
 
 
@@ -724,7 +520,7 @@ class SchoolDistrictFeature:
 class PricePredictionPipeline:
     """Complete pipeline: Address → Features → Price."""
 
-    def __init__(self, model_path: str | None = None):
+    def __init__(self, model_path: str = 'models/nationwide_smart_router.pkl'):
         """Initialize the pipeline with trained model."""
         import sys
         import joblib
@@ -734,33 +530,23 @@ class PricePredictionPipeline:
         if _scripts_dir not in sys.path:
             sys.path.insert(0, _scripts_dir)
 
-        # Default: resolve relative to this file so it works regardless of cwd
-        if model_path is None:
-            _here = Path(__file__).resolve().parent.parent.parent  # repo root
-            model_path = str(_here / "models" / "nationwide_smart_router.pkl")
-
         try:
-            import sys
-            scripts_dir = str(Path(__file__).resolve().parent.parent.parent / "scripts")
-            if scripts_dir not in sys.path:
-                sys.path.insert(0, scripts_dir)
             loaded = joblib.load(model_path)
             # Handle both raw model and dict-wrapped model formats
             self.model = loaded.get('model', loaded) if isinstance(loaded, dict) else loaded
             print(f"[OK] Model loaded: {model_path}  (type={type(self.model).__name__})")
-        except Exception as exc:
-            print(f"[WARNING] Model not loaded ({type(exc).__name__}: {exc}) — using demo heuristic")
+        except FileNotFoundError:
+            print(f"[WARNING] Model not found at {model_path}")
+            print("[INFO] Using baseline demo model")
             self.model = None
 
-    def predict_price(self, address: str, real_features: Dict = None, feature_overrides: Dict = None) -> Dict:
+    def predict_price(self, address: str, real_features: Dict = None) -> Dict:
         """
         Predict house price from address.
 
         Args:
             address: Full address (e.g., "123 Oak St, Seattle, WA 98101")
             real_features: Optional dict with real property data to use instead of simulated
-            feature_overrides: Optional dict of property-specific values to merge on top of
-                               census/assessor-derived features (e.g. BedroomAbvGr, YearBuilt).
 
         Returns:
             Dict with:
@@ -782,36 +568,6 @@ class PricePredictionPipeline:
             print("\n[STEP 1/4] Fetching property data from County Assessor...")
             assessor_data = AssessorAPIConnector.search_property_by_address(address)
             price_target = assessor_data.pop('price')  # Extract target
-
-        # Apply user-provided property overrides (e.g. from UI form inputs)
-        if feature_overrides:
-            print(f"\n[OVERRIDES] Applying {len(feature_overrides)} user-provided property values...")
-            assessor_data.update({k: v for k, v in feature_overrides.items() if v is not None})
-
-            # Recompute ALL derived features that depend on overridden base values.
-            # Without this, the model sees stale defaults (e.g. TotRmsAbvGrd=7
-            # when user actually entered 4 beds / 3 baths, or PricePerSqft still
-            # based on the 1910 sqft default rather than the user-supplied sqft).
-            _beds      = int(assessor_data.get('BedroomAbvGr', 3))
-            _full_bath = int(assessor_data.get('FullBath', 2))
-            _half_bath = int(assessor_data.get('HalfBath', 0))
-            _yr_built  = int(assessor_data.get('YearBuilt', 1990))
-            _gr_liv    = float(assessor_data.get('GrLivArea', 1910))
-            _garage    = int(assessor_data.get('GarageCars', 2))
-            _cens_med  = float(assessor_data.get('CensusMedianValue', 350000))
-
-            assessor_data['TotRmsAbvGrd'] = _beds + _full_bath + 2
-            assessor_data['YearRemodAdd'] = _yr_built + 10
-            # ~240 sqft per covered car space (standard single-car is 12x20)
-            assessor_data['GarageArea']   = _garage * 240
-            # PricePerSqft must use the actual living area, not the default 1910
-            if _gr_liv > 0:
-                assessor_data['PricePerSqft'] = round(_cens_med / _gr_liv, 1)
-            assessor_data['LandValue'] = round(_cens_med * 0.25)
-            print(f"[OVERRIDES] Derived → TotRms={assessor_data['TotRmsAbvGrd']}, "
-                  f"YearRemodAdd={assessor_data['YearRemodAdd']}, "
-                  f"GarageArea={assessor_data['GarageArea']}, "
-                  f"PricePerSqft={assessor_data['PricePerSqft']}")
 
         # Step 2: Get school district rating
         print("\n[STEP 2/4] Fetching school district rating...")
@@ -842,9 +598,6 @@ class PricePredictionPipeline:
             'error_margin': prediction['error_margin'],
             'error_margin_low': prediction['predicted_price'] - prediction['error_margin'],
             'error_margin_high': prediction['predicted_price'] + prediction['error_margin'],
-            'lat': assessor_data.get('lat'),
-            'lon': assessor_data.get('lon'),
-            'user_provided_fields': list(feature_overrides.keys()) if feature_overrides else [],
             'all_16_features': assessor_data,
             'school_district': district_name,
             'school_rating': school_rating,

@@ -2,7 +2,7 @@ services:
   - type: web
     name: house-price-api
     runtime: python
-    buildCommand: pip install -r requirements.txt && python scripts/bootstrap_training_data.py && python scripts/train.py
+    buildCommand: pip install -r requirements.txt && RAW_DATA_PATH=data/processed/csv_training_data.jsonl python scripts/train.py
     startCommand: uvicorn src.house_price_prediction.api.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: APP_ENV
@@ -16,7 +16,7 @@ services:
       - key: MODEL_PATH
         value: models/house_price_model.joblib
       - key: ENABLE_MOCK_PREDICTOR
-        value: "true"
+        value: "false"
       - key: GEOCODING_PROVIDER
         value: free-fallback
       - key: PROPERTY_DATA_PROVIDER

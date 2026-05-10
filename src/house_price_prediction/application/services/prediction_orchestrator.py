@@ -21,6 +21,9 @@ from house_price_prediction.application.services.property_enrichment_service imp
     PropertyEnrichmentService,
 )
 from house_price_prediction.config import Settings
+from house_price_prediction.application.services.prediction_validator import (
+    PredictionValidator,
+)
 from house_price_prediction.application.services.scenario_registry import (
     get_all_scenarios,
     get_scenarios_by_ids,
@@ -565,6 +568,29 @@ class Brain:
                 )
             )
 
+            # Validate prediction quality against Census context
+            validator = PredictionValidator()
+            validation_result = validator.validate_prediction(
+                predicted_price=workflow_result.predicted_price,
+                actual_house_features=workflow_result.actual_house_features,
+                feature_source=workflow_result.feature_source,
+            )
+            
+            # Update confidence score with validation result
+            # Keep existing confidence_score if higher, use validation result if lower
+            final_confidence = validation_result["confidence_score"]
+            if workflow_result.confidence_score is not None:
+                final_confidence = min(workflow_result.confidence_score, final_confidence)
+            
+            # Store validation notes in feature_provenance for audit trail
+            feature_provenance = dict(workflow_result.feature_provenance or {})
+            feature_provenance["validation_result"] = {
+                "is_valid": validation_result["is_valid"],
+                "confidence_score": final_confidence,
+                "validation_notes": validation_result["validation_notes"],
+                "anomaly_flags": validation_result["anomaly_flags"],
+            }
+
             return PredictionResponse(
                 request_id=workflow_result.request_id,
                 prediction_id=workflow_result.prediction_id,
@@ -572,7 +598,7 @@ class Brain:
                 status=workflow_result.status,
                 predicted_price=workflow_result.predicted_price,
                 currency=workflow_result.currency,
-                confidence_score=workflow_result.confidence_score,
+                confidence_score=final_confidence,
                 model_name=workflow_result.model_name,
                 model_version=workflow_result.model_version,
                 feature_snapshot_id=workflow_result.feature_snapshot_id,
@@ -584,7 +610,10 @@ class Brain:
                 selected_feature_policy_name=workflow_result.selected_feature_policy_name,
                 selected_feature_policy_version=workflow_result.selected_feature_policy_version,
                 key_features=workflow_result.key_features,
+                exact_house_features=workflow_result.exact_house_features,
+                actual_house_features=workflow_result.actual_house_features,
                 feature_source=workflow_result.feature_source,
+                feature_provenance=feature_provenance,
             )
 
     @staticmethod
