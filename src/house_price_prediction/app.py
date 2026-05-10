@@ -395,16 +395,6 @@ class PredictionRequest(BaseModel):
     postal_code: str | None = None
     country: str = "US"
     requested_by: str | None = None
-    # Optional property-level overrides to improve prediction accuracy
-    bedrooms: int | None = None
-    bathrooms: float | None = None
-    sqft_living: int | None = None
-    sqft_lot: int | None = None
-    yr_built: int | None = None
-    garage_cars: int | None = None
-    overall_qual: int | None = None
-    overall_cond: int | None = None
-    floors: float | None = None
 
 
 @app.get("/legacy/v1/health")
@@ -431,49 +421,21 @@ async def normalize_address(request: NormalizeAddressRequest):
 
     parts = [p for p in [line1, line2, city, f"{state} {postal_code}".strip()] if p]
     full_address = ", ".join(parts)
+    # Geocode using full_address — prefer the user's original query for best Nominatim results
     geocode_query = request.full_address if request.full_address else full_address
-
-    lat, lon, display = None, None, geocode_query
-    geocoding_source = None
     try:
         import urllib.request
         import json as _json
-        # Primary: US Census Geocoder (no key, high coverage for US addresses)
         encoded = urllib.parse.quote(geocode_query)
-        census_url = (
-            f"https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
-            f"?address={encoded}&benchmark=2020&format=json"
-        )
-        req = urllib.request.Request(census_url, headers={"User-Agent": "HousePricePrediction/1.0"})
+        url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=1"
+        req = urllib.request.Request(url, headers={"User-Agent": "HousePricePrediction/1.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
-            data = _json.loads(resp.read())
-        matches = data.get("result", {}).get("addressMatches", [])
-        if matches:
-            coords = matches[0]["coordinates"]
-            lat = float(coords["y"])
-            lon = float(coords["x"])
-            display = matches[0].get("matchedAddress", geocode_query)
-            geocoding_source = "Census"
+            results = _json.loads(resp.read())
+        lat = float(results[0]["lat"]) if results else None
+        lon = float(results[0]["lon"]) if results else None
+        display = results[0].get("display_name", geocode_query) if results else geocode_query
     except Exception:
-        pass
-
-    if lat is None:
-        try:
-            import urllib.request
-            import json as _json
-            # Fallback: Nominatim
-            encoded = urllib.parse.quote(geocode_query)
-            url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=1"
-            req = urllib.request.Request(url, headers={"User-Agent": "HousePricePrediction/1.0"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                results = _json.loads(resp.read())
-            if results:
-                lat = float(results[0]["lat"])
-                lon = float(results[0]["lon"])
-                display = results[0].get("display_name", geocode_query)
-                geocoding_source = "Nominatim"
-        except Exception:
-            pass
+        lat, lon, display = None, None, geocode_query
 
     return {
         "normalized_address_id": str(uuid.uuid4()),
@@ -486,7 +448,6 @@ async def normalize_address(request: NormalizeAddressRequest):
         "formatted_address": display,
         "latitude": lat,
         "longitude": lon,
-        "geocoding_source": geocoding_source,
     }
 
 
@@ -510,21 +471,8 @@ async def create_prediction(request: PredictionRequest):
     else:
         parts = [p for p in [line1, city, f"{state} {postal_code}".strip()] if p]
         full_address = ", ".join(parts)
-
-    # Build property-level overrides from user-supplied form fields
-    _overrides: dict = {}
-    if request.bedrooms    is not None: _overrides["BedroomAbvGr"] = request.bedrooms
-    if request.bathrooms   is not None: _overrides["FullBath"]     = int(request.bathrooms)
-    if request.bathrooms   is not None: _overrides["HalfBath"]     = 1 if (request.bathrooms % 1) >= 0.5 else 0
-    if request.sqft_living is not None: _overrides["GrLivArea"]    = request.sqft_living
-    if request.sqft_lot    is not None: _overrides["LotArea"]      = request.sqft_lot
-    if request.yr_built    is not None: _overrides["YearBuilt"]    = request.yr_built
-    if request.garage_cars is not None: _overrides["GarageCars"]   = request.garage_cars
-    if request.overall_qual is not None: _overrides["OverallQual"] = request.overall_qual
-    if request.overall_cond is not None: _overrides["OverallCond"] = request.overall_cond
-
     try:
-        result = pipeline.predict_price(full_address, feature_overrides=_overrides if _overrides else None)
+        result = pipeline.predict_price(full_address)
         predicted_price = result.get("predicted_price", 0)
         features = result.get("all_16_features", {})
     except Exception as e:
@@ -536,30 +484,14 @@ async def create_prediction(request: PredictionRequest):
     populated = sum(1 for v in features.values() if v not in (None, 0, '', 'Unknown'))
     completeness_score = round(populated / total_features, 4) if total_features else 0.0
 
-    # Key property fields to highlight in the UI
-    _PROPERTY_DISPLAY_KEYS = [
-        "BedroomAbvGr", "FullBath", "HalfBath", "GrLivArea", "LotArea",
-        "YearBuilt", "GarageCars", "GarageArea", "OverallQual", "OverallCond",
-        "Fireplaces", "TotRmsAbvGrd", "PricePerSqft",
-        "NeighborhoodScore", "CensusMedianValue", "MedianIncomeK",
-        "SchoolDistrictRating", "WalkScore", "PropertyType", "City", "State",
-    ]
-    property_features = {
-        k: (round(features[k], 2) if isinstance(features[k], float) else features[k])
-        for k in _PROPERTY_DISPLAY_KEYS
-        if k in features and features[k] not in (None, "")
-    }
-
     return {
         "prediction_id": str(uuid.uuid4()),
         "request_id": str(uuid.uuid4()),
         "predicted_price": predicted_price,
-        "confidence": result.get("confidence"),
-        "error_margin": result.get("error_margin"),
         "feature_snapshot": {
             "completeness_score": completeness_score,
-            "features": property_features,
-            "user_provided_fields": list(_overrides.keys()),
+            "features": {k: round(v, 2) if isinstance(v, float) else v
+                         for k, v in list(features.items())[:4]},
         },
         "address_line_1": line1,
         "city": city,

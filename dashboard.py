@@ -4,73 +4,52 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import requests
-                            key=lookup_state_key(slot_index, "p_bedrooms"),
-                            help="-1 keeps provider value. Use listing value to force exact facts.",
-                        )
-                    with ov2:
-                        st.number_input(
-                            "Bathrooms",
-                            min_value=-1.0,
-                            max_value=20.0,
-                            value=-1.0,
-                            step=0.25,
-                            key=lookup_state_key(slot_index, "p_bathrooms"),
-                            help="Decimal values supported (e.g., 3.5).",
-                        )
-                    with ov3:
-                        st.number_input(
-                            "Living Area (sqft)",
-                            min_value=-1,
-                            max_value=50000,
-                            value=-1,
-                            key=lookup_state_key(slot_index, "p_sqft_living"),
-                        )
-                    with ov4:
-                        st.number_input(
-                            "Lot Area (sqft)",
-                            min_value=-1,
-                            max_value=2000000,
-                            value=-1,
-                            key=lookup_state_key(slot_index, "p_sqft_lot"),
-                        )
 
-                    ov5, ov6, ov7, ov8 = st.columns(4)
-                    with ov5:
-                        st.number_input(
-                            "Lot Area (acres)",
-                            min_value=-1.0,
-                            max_value=1000.0,
-                            value=-1.0,
-                            step=0.1,
-                            key=lookup_state_key(slot_index, "p_lot_acres"),
-                            help="Used only if Lot Area (sqft) is not set.",
-                        )
-                    with ov6:
-                        st.number_input(
-                            "Year Built",
-                            min_value=-1,
-                            max_value=2030,
-                            value=-1,
-                            key=lookup_state_key(slot_index, "p_year_built"),
-                        )
-                    with ov7:
-                        st.number_input(
-                            "Garage Spaces",
-                            min_value=-1,
-                            max_value=20,
-                            value=-1,
-                            key=lookup_state_key(slot_index, "p_garage_cars"),
-                        )
-                    with ov8:
-                        st.number_input(
-                            "Total Rooms",
-                            min_value=-1,
-                            max_value=30,
-                            value=-1,
-                            key=lookup_state_key(slot_index, "p_total_rooms"),
-                        )
+# Set page config
+st.set_page_config(
+    page_title="Housing Price Dashboard",
+    page_icon="🏠",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-                search_submitted = st.form_submit_button("🔍 Find & Predict Price", use_container_width=True)
+# Custom CSS for better styling
+st.markdown("""
+    <style>
+    /* Keyframe animations */
+    @keyframes slideInDown {
+        from {
+            opacity: 0;
+            transform: translateY(-30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+    
+    @keyframes shimmer {
+        0% { background-position: -1000px 0; }
+        100% { background-position: 1000px 0; }
+    }
+    
+    /* Main page background */
+    .stMain {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        animation: fadeIn 0.8s ease-in;
+    }
+    
+    /* Sidebar background */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
         animation: slideInDown 0.6s ease-out;
@@ -253,15 +232,9 @@ def _prepare_dashboard_dataset(df: pd.DataFrame) -> pd.DataFrame:
 @st.cache_resource
 def load_trained_model():
     """Load configured model artifact first, then fall back to latest model file."""
-    import sys
     from pathlib import Path
     from src.house_price_prediction.config import load_settings
     from src.house_price_prediction.model import load_model_artifact
-
-    # model_utils is required by nationwide_smart_router.pkl at unpickle time
-    scripts_dir = str(Path(__file__).parent / "scripts")
-    if scripts_dir not in sys.path:
-        sys.path.insert(0, scripts_dir)
 
     models_dir = Path(__file__).parent / "models"
     settings = load_settings()
@@ -685,130 +658,133 @@ def render_market_metrics(metrics: dict) -> None:
 
 import re as _re
 
-@st.cache_resource
-def _get_offline_pipeline():
-    """Load the PricePredictionPipeline once and cache it for offline use."""
-    try:
-        import sys, os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
-        from house_price_prediction.address_to_price import PricePredictionPipeline
-        return PricePredictionPipeline()
-    except Exception as exc:
-        return None
+# ── Median King County defaults for the local prediction form ────────────────
+_LOCAL_DEFAULTS = {
+    "bedrooms": 3,
+    "bathrooms": 2.25,
+    "sqft_living": 2079,
+    "sqft_lot": 7618,
+    "floors": 1.5,
+    "waterfront": 0,
+    "view": 0,
+    "condition": 3,
+    "grade": 7,
+    "sqft_above": 1788,
+    "sqft_basement": 291,
+    "yr_built": 1971,
+    "yr_renovated": 0,
+    "zipcode": 98070,
+    "lat": 47.5605,
+    "long": -122.2139,
+    "sqft_living15": 1987,
+    "sqft_lot15": 7620,
+}
 
 
-def _run_offline_pipeline(slot_index: int, fallback: dict) -> None:
-    """Predict using the local PricePredictionPipeline when the API is unreachable.
-
-    Uses the address + property details already entered in the main form —
-    no separate form needed.
-    """
-    offline_key = f"offline_prediction_{slot_index}"
-    offline_error_key = f"offline_error_{slot_index}"
-
-    full_address = fallback.get("full_address", "")
-    if not full_address:
-        parts = [p for p in [fallback.get("city", ""), fallback.get("state", ""), fallback.get("postal", "")] if p]
-        full_address = ", ".join(parts)
-
+def _render_local_prediction_form(slot_index: int, pipeline, parsed_addr: dict) -> None:
+    """Render a property-feature form and predict using the locally loaded model (no API needed)."""
+    st.markdown("---")
     st.info(
-        "⚡ **API server is unreachable — running prediction locally** using your entered property details."
+        "💡 **API server is offline.** Use the form below to get an instant price estimate "
+        "directly from the locally loaded model — no backend required."
     )
+    st.subheader("🔮 Local Prediction")
 
-    if offline_key not in st.session_state:
-        # Auto-run on first render after API failure
-        _do_offline_predict(slot_index, fallback, full_address, offline_key, offline_error_key)
+    with st.form(f"local_predict_form_{slot_index}"):
+        st.markdown("**📍 Location** (pre-filled from your address)")
+        lc1, lc2, lc3 = st.columns(3)
+        with lc1:
+            l_city = st.text_input("City", value=parsed_addr.get("city", ""))
+        with lc2:
+            l_state = st.text_input("State (2-letter)", value=parsed_addr.get("state", ""), max_chars=2)
+        with lc3:
+            l_zip = st.text_input("ZIP Code", value=parsed_addr.get("postal", ""), max_chars=5)
 
-    result = st.session_state.get(offline_key)
-    err    = st.session_state.get(offline_error_key)
+        st.markdown("**🏠 Property Details**")
+        pd1, pd2, pd3, pd4 = st.columns(4)
+        with pd1:
+            l_beds = st.number_input("Bedrooms", min_value=0, max_value=20, value=_LOCAL_DEFAULTS["bedrooms"])
+        with pd2:
+            l_baths = st.number_input("Bathrooms", min_value=0.0, max_value=10.0, value=_LOCAL_DEFAULTS["bathrooms"], step=0.25)
+        with pd3:
+            l_sqft = st.number_input("Living Area (sqft)", min_value=100, max_value=30000, value=_LOCAL_DEFAULTS["sqft_living"])
+        with pd4:
+            l_lot = st.number_input("Lot Area (sqft)", min_value=100, max_value=2000000, value=_LOCAL_DEFAULTS["sqft_lot"])
 
-    if result:
-        price      = result.get("predicted_price", 0)
-        err_margin = result.get("error_margin", 0)
-        low, high  = price - err_margin, price + err_margin
+        qa1, qa2, qa3, qa4 = st.columns(4)
+        with qa1:
+            l_grade = st.slider("Grade (1–13)", 1, 13, _LOCAL_DEFAULTS["grade"])
+        with qa2:
+            l_cond = st.slider("Condition", 1, 5, _LOCAL_DEFAULTS["condition"])
+        with qa3:
+            l_yr_built = st.number_input("Year Built", min_value=1800, max_value=2026, value=_LOCAL_DEFAULTS["yr_built"])
+        with qa4:
+            l_floors = st.number_input("Floors", min_value=1.0, max_value=4.0, value=_LOCAL_DEFAULTS["floors"], step=0.5)
 
-        st.markdown(
-            f"""
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        padding: 28px 32px; border-radius: 14px; margin: 12px 0 16px 0;
-                        text-align: center; box-shadow: 0 8px 30px rgba(102,126,234,0.4);">
-                <p style="color:rgba(255,255,255,0.85);margin:0 0 6px 0;font-size:1rem;font-weight:500;">
-                    Estimated House Price <span style="font-size:0.8rem;">(offline model)</span>
-                </p>
-                <p style="color:white;margin:0;font-size:3rem;font-weight:800;letter-spacing:1px;">
-                    ${price:,.0f}
-                </p>
-                <p style="color:rgba(255,255,255,0.7);margin:6px 0 0 0;font-size:0.9rem;">
-                    Range: ${low:,.0f} – ${high:,.0f}
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        gr1, gr2, gr3, gr4 = st.columns(4)
+        with gr1:
+            l_sqft_above = st.number_input("Above-ground sqft", min_value=0, max_value=30000, value=_LOCAL_DEFAULTS["sqft_above"])
+        with gr2:
+            l_sqft_bsmt = st.number_input("Basement sqft", min_value=0, max_value=10000, value=_LOCAL_DEFAULTS["sqft_basement"])
+        with gr3:
+            l_yr_reno = st.number_input("Year Renovated (0=never)", min_value=0, max_value=2026, value=_LOCAL_DEFAULTS["yr_renovated"])
+        with gr4:
+            l_waterfront = st.selectbox("Waterfront", [0, 1], format_func=lambda x: "Yes" if x else "No")
 
-        feats = result.get("all_16_features", {})
-        _FEAT_LABELS = {
-            "BedroomAbvGr":         ("🛏 Bedrooms",         lambda v: str(int(v))),
-            "FullBath":             ("🚿 Full Baths",        lambda v: str(int(v))),
-            "HalfBath":             ("🚽 Half Baths",        lambda v: str(int(v))),
-            "GrLivArea":            ("📐 Living Area",       lambda v: f"{int(v):,} sqft"),
-            "LotArea":              ("🌿 Lot Size",          lambda v: f"{int(v)/43560:.2f} Acres"),
-            "YearBuilt":            ("🏗 Year Built",        lambda v: str(int(v))),
-            "GarageCars":           ("🚗 Garage Spaces",     lambda v: str(int(v))),
-            "GarageArea":           ("🅿 Garage Area",       lambda v: f"{int(v):,} sqft"),
-            "PricePerSqft":         ("💲 Price/sqft",        lambda v: f"${v:,.0f}"),
-            "NeighborhoodScore":    ("📍 Nbhd Score",        lambda v: f"{v:.0f}/100"),
-            "CensusMedianValue":    ("🏦 Median Value",      lambda v: f"${v:,.0f}"),
-            "MedianIncomeK":        ("💰 Med. Income",      lambda v: f"${v:.0f}k"),
-            "SchoolDistrictRating": ("🎓 School Rating",     lambda v: f"{v:.1f}/10"),
-            "WalkScore":            ("🚶 Walk Score",        lambda v: f"{v:.0f}/100"),
-            "PropertyType":         ("🏡 Property Type",     lambda v: str(v)),
-        }
-        display_items = []
-        for key, (label, fmt) in _FEAT_LABELS.items():
-            if key in feats:
-                try:
-                    display_items.append((label, fmt(feats[key])))
-                except Exception:
-                    display_items.append((label, str(feats[key])))
+        with st.expander("🌍 Comparable Nearby Properties (optional)"):
+            nb1, nb2 = st.columns(2)
+            with nb1:
+                l_sqft15 = st.number_input("Avg nearby living sqft", min_value=100, max_value=30000, value=_LOCAL_DEFAULTS["sqft_living15"])
+            with nb2:
+                l_lot15 = st.number_input("Avg nearby lot sqft", min_value=100, max_value=2000000, value=_LOCAL_DEFAULTS["sqft_lot15"])
 
-        if display_items:
-            st.markdown("##### 🏠 Property Details")
-            for i in range(0, len(display_items), 3):
-                row = display_items[i:i + 3]
-                cols = st.columns(3)
-                for col, (label, val) in zip(cols, row):
-                    col.metric(label, val)
+        local_submit = st.form_submit_button("🔮 Predict Locally", use_container_width=True)
 
-    elif err:
-        st.error(f"❌ Offline prediction failed: {err}")
-
-
-def _do_offline_predict(slot_index, fallback, full_address, result_key, error_key):
-    pipeline = _get_offline_pipeline()
-    if pipeline is None:
-        st.session_state[error_key] = "Could not load offline pipeline."
-        return
-    overrides = {
-        "BedroomAbvGr": fallback.get("bedrooms"),
-        "FullBath":     int(fallback["bathrooms"]) if fallback.get("bathrooms") is not None else None,
-        "HalfBath":     1 if fallback.get("bathrooms") and (fallback["bathrooms"] % 1) >= 0.5 else 0,
-        "GrLivArea":    fallback.get("sqft_living"),
-        "LotArea":      fallback.get("sqft_lot"),
-        "YearBuilt":    fallback.get("yr_built"),
-        "GarageCars":   fallback.get("garage_cars"),
-        "OverallQual":  fallback.get("overall_qual"),
-        "OverallCond":  fallback.get("overall_cond"),
-    }
-    overrides = {k: v for k, v in overrides.items() if v is not None}
-    with st.spinner("🔮 Running offline prediction…"):
+    local_pred_key = f"local_prediction_{slot_index}"
+    if local_submit:
+        # Build zipcode from input; fall back to WA median
         try:
-            result = pipeline.predict_price(full_address, feature_overrides=overrides if overrides else None)
-            st.session_state[result_key] = result
-            st.session_state.pop(error_key, None)
+            l_zipcode = int(l_zip.strip()) if l_zip.strip().isdigit() else _LOCAL_DEFAULTS["zipcode"]
+        except (ValueError, AttributeError):
+            l_zipcode = _LOCAL_DEFAULTS["zipcode"]
+
+        feature_row = {
+            "id": 0,
+            "date": 0,
+            "bedrooms": int(l_beds),
+            "bathrooms": float(l_baths),
+            "sqft_living": int(l_sqft),
+            "sqft_lot": int(l_lot),
+            "floors": float(l_floors),
+            "waterfront": int(l_waterfront),
+            "view": 0,
+            "condition": int(l_cond),
+            "grade": int(l_grade),
+            "sqft_above": int(l_sqft_above),
+            "sqft_basement": int(l_sqft_bsmt),
+            "yr_built": int(l_yr_built),
+            "yr_renovated": int(l_yr_reno),
+            "zipcode": l_zipcode,
+            "lat": _LOCAL_DEFAULTS["lat"],
+            "long": _LOCAL_DEFAULTS["long"],
+            "sqft_living15": int(l_sqft15),
+            "sqft_lot15": int(l_lot15),
+        }
+        try:
+            row_df = pd.DataFrame([feature_row])
+            predicted_price = float(pipeline.predict(row_df)[0])
+            st.session_state[local_pred_key] = predicted_price
         except Exception as exc:
-            st.session_state[error_key] = str(exc)
-            st.session_state.pop(result_key, None)
+            st.session_state[local_pred_key] = None
+            st.error(f"❌ Local prediction failed: {exc}")
+
+    local_pred = st.session_state.get(local_pred_key)
+    if local_pred is not None:
+        st.success("### 🏠 Price Estimate Ready")
+        lpr1, lpr2, lpr3 = st.columns(3)
+        lpr1.metric("Predicted Price", f"${local_pred:,.0f}")
+        lpr2.metric("Model", "LightGBM (local)")
+        lpr3.metric("Source", "Offline / No API")
 
 
 def _parse_address_client(full: str) -> dict:
@@ -863,33 +839,6 @@ def render_lookup_slot(slot_index: int, api_base_url: str) -> dict | None:
     if prediction_error_key not in st.session_state:
         st.session_state[prediction_error_key] = None
 
-    # Apply prefill from existing prediction snapshot BEFORE the form renders,
-    # so the form shows heuristic estimates the user can correct.
-    # Only fills keys the user hasn't explicitly set (i.e. still None).
-    _existing_pred = st.session_state.get(prediction_key)
-    if _existing_pred:
-        _snap = _existing_pred.get("feature_snapshot", {}).get("features", {})
-        _user_provided = set(_existing_pred.get("feature_snapshot", {}).get("user_provided_fields", []))
-        _auto_prefills = [
-            (lookup_state_key(slot_index, "p_bedrooms"),    "BedroomAbvGr", int),
-            (lookup_state_key(slot_index, "p_bathrooms"),   "FullBath",     float),
-            (lookup_state_key(slot_index, "p_sqft_living"), "GrLivArea",    int),
-            (lookup_state_key(slot_index, "p_sqft_lot"),    "LotArea",      int),
-            (lookup_state_key(slot_index, "p_yr_built"),    "YearBuilt",    int),
-            (lookup_state_key(slot_index, "p_garage_cars"), "GarageCars",   int),
-        ]
-        _heuristic_key = f"heuristic_prefill_{slot_index}"
-        _heuristic_store = st.session_state.get(_heuristic_key, {})
-        for _sk, _fk, _cast in _auto_prefills:
-            if _fk not in _user_provided and _fk in _snap and st.session_state.get(_sk) is None:
-                try:
-                    val = _cast(_snap[_fk])
-                    st.session_state[_sk] = val
-                    _heuristic_store[_sk] = val  # remember this was auto-filled
-                except Exception:
-                    pass
-        st.session_state[_heuristic_key] = _heuristic_store
-
     slot_label = f"Search Address {slot_index + 1}"
     with st.container(border=True):
         st.markdown(f"### {slot_label}")
@@ -935,17 +884,20 @@ def render_lookup_slot(slot_index: int, api_base_url: str) -> dict | None:
                     st.text_input(
                         "State",
                         placeholder="GA",
+                        max_chars=2,
                         key=lookup_state_key(slot_index, "state"),
                     )
                 with col5:
                     st.text_input(
                         "ZIP Code",
                         placeholder="30308",
+                        max_chars=10,
                         key=lookup_state_key(slot_index, "postal"),
                     )
                 with col6:
                     st.text_input(
                         "Country",
+                        max_chars=2,
                         key=lookup_state_key(slot_index, "country"),
                         value=st.session_state.get(lookup_state_key(slot_index, "country"), "US"),
                     )
@@ -1077,39 +1029,14 @@ def render_lookup_slot(slot_index: int, api_base_url: str) -> dict | None:
                     # Clear any stale local-fallback state when API succeeds
                     st.session_state.pop(f"local_fallback_{slot_index}", None)
                     st.session_state.pop(f"local_prediction_{slot_index}", None)
-                    # Clear heuristic-prefill tracking so fresh address gets fresh estimates
-                    st.session_state.pop(f"heuristic_prefill_{slot_index}", None)
                     st.success("✅ Address found!")
-                    # Auto-trigger prediction immediately
-                    formatted = body.get("formatted_address") or body.get("address_line_1", "")
-                    # Only send a form field as a user override if it was explicitly changed
-                    # from the heuristic pre-fill value — prevents auto-filled values from
-                    # masquerading as user-confirmed data (removes * incorrectly).
-                    _hp = st.session_state.get(f"heuristic_prefill_{slot_index}", {})
-
-                    def _override(state_key):
-                        val = st.session_state.get(state_key)
-                        if val is None:
-                            return None
-                        # If the value is identical to what we auto-prefilled, treat as heuristic
-                        if _hp.get(state_key) is not None and val == _hp[state_key]:
-                            return None
-                        return val
-
+                    # Auto-trigger prediction immediately with real data (no hardcoded defaults)
                     pred_payload = {
                         "address_line_1": body.get("address_line_1"),
                         "city": body.get("city"),
                         "state": body.get("state"),
                         "postal_code": body.get("postal_code"),
                         "country": body.get("country"),
-                        "bedrooms":     _override(lookup_state_key(slot_index, "p_bedrooms")),
-                        "bathrooms":    _override(lookup_state_key(slot_index, "p_bathrooms")),
-                        "sqft_living":  _override(lookup_state_key(slot_index, "p_sqft_living")),
-                        "sqft_lot":     _override(lookup_state_key(slot_index, "p_sqft_lot")),
-                        "yr_built":     _override(lookup_state_key(slot_index, "p_yr_built")),
-                        "garage_cars":  _override(lookup_state_key(slot_index, "p_garage_cars")),
-                        "overall_qual": _override(lookup_state_key(slot_index, "p_overall_qual")),
-                        "overall_cond": _override(lookup_state_key(slot_index, "p_overall_cond")),
                     }
                     if body.get("address_line_2"):
                         pred_payload["address_line_2"] = body.get("address_line_2")
@@ -1154,8 +1081,6 @@ def render_lookup_slot(slot_index: int, api_base_url: str) -> dict | None:
                         st.session_state[prediction_key] = pred_body
                         st.session_state[prediction_error_key] = None
                         st.session_state["last_prediction_id"] = str(pred_body.get("prediction_id", ""))
-                        # Prefill is handled at the top of render_lookup_slot on every run
-                        st.rerun()
                     else:
                         st.session_state[prediction_key] = None
                         st.session_state[prediction_error_key] = {
@@ -1164,20 +1089,10 @@ def render_lookup_slot(slot_index: int, api_base_url: str) -> dict | None:
                         }
                 else:
                     st.session_state[normalized_key] = None
-                    # Store address + property inputs so offline pipeline can run without the API
+                    # Persist parsed address so the local prediction form stays visible on rerun
                     st.session_state[f"local_fallback_{slot_index}"] = {
-                        "full_address": canonical_full,
-                        "city": city, "state": state, "postal": postal,
-                        "bedrooms":     st.session_state.get(lookup_state_key(slot_index, "p_bedrooms")),
-                        "bathrooms":    st.session_state.get(lookup_state_key(slot_index, "p_bathrooms")),
-                        "sqft_living":  st.session_state.get(lookup_state_key(slot_index, "p_sqft_living")),
-                        "sqft_lot":     st.session_state.get(lookup_state_key(slot_index, "p_sqft_lot")),
-                        "yr_built":     st.session_state.get(lookup_state_key(slot_index, "p_yr_built")),
-                        "garage_cars":  st.session_state.get(lookup_state_key(slot_index, "p_garage_cars")),
-                        "overall_qual": st.session_state.get(lookup_state_key(slot_index, "p_overall_qual")),
-                        "overall_cond": st.session_state.get(lookup_state_key(slot_index, "p_overall_cond")),
+                        "city": city, "state": state, "postal": postal
                     }
-                    st.session_state.pop(f"local_prediction_{slot_index}", None)
                     error_detail = ""
                     if sc is None:
                         error_detail = "API server is not reachable — is the backend running?"
@@ -1195,8 +1110,10 @@ def render_lookup_slot(slot_index: int, api_base_url: str) -> dict | None:
         normalized = st.session_state.get(normalized_key)
         if not normalized:
             local_fallback = st.session_state.get(f"local_fallback_{slot_index}")
-            if local_fallback:
-                _run_offline_pipeline(slot_index, local_fallback)
+            if local_fallback and model_artifact is not None:
+                _render_local_prediction_form(slot_index, model_artifact.model, local_fallback)
+            elif local_fallback and model_artifact is None:
+                st.warning("⚠️ No trained model found. Train a model using `scripts/train.py` to enable local predictions.")
             else:
                 st.info("Enter an address above and click Search Address.")
             return None
@@ -1228,7 +1145,16 @@ def render_lookup_slot(slot_index: int, api_base_url: str) -> dict | None:
                 if normalized.get("geocoding_source"):
                     st.caption(f"📡 Source: {normalized['geocoding_source']}")
 
-        # Map pin moved below Property Details
+        # Map pin
+        latitude = normalized.get("latitude")
+        longitude = normalized.get("longitude")
+        if latitude is not None and longitude is not None:
+            st.map(
+                pd.DataFrame([{"lat": latitude, "lon": longitude}]),
+                latitude="lat",
+                longitude="lon",
+                zoom=13,
+            )
 
         # ── Predict Price ─────────────────────────────────────────────────
         st.markdown("---")
@@ -1247,26 +1173,22 @@ def render_lookup_slot(slot_index: int, api_base_url: str) -> dict | None:
                 if isinstance(census_value, (int, float)) and census_value > 0:
                     relative_to_census = (price - census_value) / census_value
 
-                err = existing_prediction.get("error_margin")
-                low  = price - err if err else None
-                high = price + err if err else None
-                range_str = f"${low:,.0f} – ${high:,.0f}" if low and high else ""
                 st.markdown(
                     f"""
-                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                                padding: 28px 32px; border-radius: 14px; margin: 12px 0 16px 0;
-                                text-align: center; box-shadow: 0 8px 30px rgba(102,126,234,0.4);">
+                    <div style="background: linear-gradient(135deg, #1f6feb 0%, #0f766e 100%);
+                                padding: 28px 32px; border-radius: 14px; margin: 12px 0 20px 0;
+                                box-shadow: 0 8px 30px rgba(15,118,110,0.30);">
                         <p style="color: rgba(255,255,255,0.85); margin: 0 0 6px 0; font-size: 1rem; font-weight: 500;">
                             Estimated Market Price
                         </p>
                         <p style="color: white; margin: 0; font-size: 3rem; font-weight: 800; letter-spacing: 1px;">
                             ${price:,.0f}
                         </p>
-                        {"<p style='color:rgba(255,255,255,0.7);margin:6px 0 0 0;font-size:0.9rem;'>Range: " + range_str + "</p>" if range_str else ""}
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
+
                 summary_cols = st.columns(3)
                 summary_cols[0].metric("Data Source", source_label)
                 summary_cols[1].metric("Vs Census Median", _format_pct(relative_to_census))
@@ -1311,29 +1233,30 @@ def render_lookup_slot(slot_index: int, api_base_url: str) -> dict | None:
                         st.json({
                             "model_name": existing_prediction.get("model_name"),
                             "model_version": existing_prediction.get("model_version"),
-            }
-            display_items = []
-            for key, (label, fmt) in _FEAT_LABELS.items():
-                if key in feats:
-                    try:
-                        val_str = fmt(feats[key])
-                        if key in _ESTIMATED_KEYS and key not in user_provided:
-                            val_str += " *"
-                        display_items.append((label, val_str))
-                    except Exception:
-                        display_items.append((label, str(feats[key])))
-            if display_items:
-                st.markdown("##### 🏠 Property Details")
-                chunk_size = 3
-                for i in range(0, len(display_items), chunk_size):
-                    row_items = display_items[i:i + chunk_size]
-                    cols = st.columns(chunk_size)
-                    for col, (label, val) in zip(cols, row_items):
-                        try:
-                            col.metric(label, val)
-                        except Exception:
-                            col.metric(label, str(val))
-                st.caption("* estimated value — the form above has been pre-filled with these estimates. Correct any that differ from your property's actual details and re-submit for a more accurate prediction.")
+                            "feature_source": existing_prediction.get("feature_source"),
+                            "was_reused": existing_prediction.get("was_reused"),
+                            "generated_at": existing_prediction.get("generated_at"),
+                            "selected_feature_policy_name": existing_prediction.get("selected_feature_policy_name"),
+                        })
+                    with detail_cols[1]:
+                        st.markdown("**Feature provenance**")
+                        st.json(existing_prediction.get("feature_provenance") or {"note": "No provenance metadata returned."})
+
+                    if inferred_features:
+                        st.markdown("**Inferred model inputs**")
+                        pretty_features = {
+                            _KEY_FEATURE_LABELS.get(name, name): _format_feature_metric_value(name, value)
+                            for name, value in sorted(inferred_features.items())
+                        }
+                        st.json(pretty_features)
+                    elif exact_features:
+                        st.markdown("**Exact property facts**")
+                        pretty_features = {
+                            _KEY_FEATURE_LABELS.get(name, name): _format_feature_metric_value(name, value)
+                            for name, value in sorted(exact_features.items())
+                        }
+                        st.json(pretty_features)
+
         prediction_error = st.session_state.get(prediction_error_key)
         if prediction_error:
             st.error(prediction_error["message"])
@@ -1342,6 +1265,8 @@ def render_lookup_slot(slot_index: int, api_base_url: str) -> dict | None:
                 st.error(f"Detail: {detail}" if isinstance(detail, str) else "")
                 if not isinstance(detail, str):
                     st.json(detail)
+
+
 
         # ── Market context (shown below the prediction) ────────────────────
         with st.expander("📊 Dataset Reference Averages (Not This Property)", expanded=False):
